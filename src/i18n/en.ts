@@ -43,6 +43,11 @@ export const en = {
     download: 'Download',
   },
   suggested: 'Suggested',
+  showcase: {
+    label: 'Results made with Alphaveil',
+    alt: (model: string) => `Cutout produced locally with ${model}`,
+    tags: { hair: 'hair', mesh: 'mesh', fineEdges: 'fine edges', fur: 'fur', upscaled: '×4 upscaled' } as Record<string, string>,
+  },
   compare: { toggle: 'Compare', before: 'Before', after: 'After', hint: 'Drag the divider to compare before and after' },
   exportOpts: {
     format: 'Format',

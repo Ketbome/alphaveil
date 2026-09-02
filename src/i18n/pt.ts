@@ -45,6 +45,11 @@ export const pt: Dict = {
     download: 'Baixar',
   },
   suggested: 'Sugerido',
+  showcase: {
+    label: 'Resultados feitos com Alphaveil',
+    alt: (model) => `Recorte gerado localmente com ${model}`,
+    tags: { hair: 'cabelo', mesh: 'malha', fineEdges: 'bordas finas', fur: 'pelagem', upscaled: 'ampliado ×4' },
+  },
   compare: { toggle: 'Comparar', before: 'Antes', after: 'Depois', hint: 'Arraste a cortina para comparar o antes e o depois' },
   exportOpts: {
     format: 'Formato',

@@ -20,6 +20,7 @@ import { ImageQueue } from './components/ImageQueue'
 import { SuggestedActions, type SuggestedAction } from './components/SuggestedActions'
 import { Logo } from './components/Logo'
 import { CompareView } from './components/CompareView'
+import { Showcase } from './components/Showcase'
 
 type Format = 'png' | 'jpeg' | 'webp'
 
@@ -281,10 +282,10 @@ export default function App() {
 
       <main className="flex min-h-0 flex-1 flex-col">
         {!active ? (
-          <div className="relative flex flex-1 overflow-y-auto">
+          <div className="relative flex flex-1 overflow-x-hidden overflow-y-auto">
             <div className="workspace-grid pointer-events-none absolute inset-0" />
-            <div className="relative mx-auto grid w-full max-w-6xl items-center gap-6 px-4 py-5 sm:px-5 sm:py-8 md:px-8 lg:grid-cols-[0.82fr_1.18fr] lg:gap-14 lg:py-10">
-              <section className="order-last max-w-lg lg:order-none">
+            <div className="relative mx-auto grid w-full max-w-6xl items-center gap-6 px-4 py-5 sm:px-5 sm:py-8 md:px-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-28 lg:px-20 lg:py-24">
+              <section className="order-last min-w-0 max-w-lg lg:order-none">
                 <div className="rise mb-5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">{t.hero.kicker}</div>
                 <h1 className="rise max-w-md font-display text-4xl leading-[0.92] tracking-[-0.02em] sm:text-6xl lg:text-7xl">
                   {t.hero.title1}<br /><span className="italic text-accent">{t.hero.title2}</span>
@@ -305,7 +306,10 @@ export default function App() {
                   </div>
                 </div>
               </section>
-              <div className="rise" style={{ animationDelay: '200ms' }}><Dropzone onFiles={addFiles} /></div>
+              <div className="rise min-w-0 lg:relative" style={{ animationDelay: '200ms' }}>
+                <Dropzone onFiles={addFiles} />
+                <Showcase />
+              </div>
             </div>
             {error && <p role="alert" className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-md border border-danger/30 bg-panel px-3 py-1.5 text-xs text-danger shadow">{error}</p>}
           </div>

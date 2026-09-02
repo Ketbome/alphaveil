@@ -191,7 +191,26 @@ button, a, input, select {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 24px 60px -30px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+@keyframes drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+
+.specimen {
+  --px: 0;
+  --py: 0;
+  animation: drift 7s ease-in-out infinite;
+  z-index: 1;
+}
+
+.specimen-card {
+  transform: rotate(var(--tilt)) translate(calc(var(--px) * var(--depth) * 10px), calc(var(--py) * var(--depth) * 8px));
+  transition: transform 600ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .specimen { animation: none; }
+
   *, *::before, *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
