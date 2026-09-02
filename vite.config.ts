@@ -11,7 +11,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'og.png', 'showcase/*.webp'],
+      includeAssets: ['favicon.svg', 'favicon.ico', 'favicon-*.png', 'apple-touch-icon.png', 'og.png', 'showcase/*.webp'],
       manifest: {
         name: 'Alphaveil',
         short_name: 'Alphaveil',
