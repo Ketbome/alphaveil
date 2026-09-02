@@ -6,7 +6,7 @@ Approved on 2026-09-02.
 
 ## Goal
 
-BG Studio processes images entirely in the browser. Users can crop, remove a background, trim transparent borders, and upscale an image without uploading it. The application suggests useful next actions but never runs an AI operation without user confirmation.
+Alphaveil processes images entirely in the browser. Users can crop, remove a background, trim transparent borders, and upscale an image without uploading it. The application suggests useful next actions but never runs an AI operation without user confirmation.
 
 ## Constraints
 

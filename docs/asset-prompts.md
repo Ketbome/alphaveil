@@ -1,8 +1,8 @@
-# BG Studio Asset Prompts
+# Alphaveil Asset Prompts
 
 ## Production Method
 
-Generate source images only. Process those sources with BG Studio to create the transparent cutouts and upscaled details used by the interface. This keeps the showcase truthful: every result displayed by the product was produced by the product.
+Generate source images only. Process those sources with Alphaveil to create the transparent cutouts and upscaled details used by the interface. This keeps the showcase truthful: every result displayed by the product was produced by the product.
 
 Use a consistent photographic direction across all source images:
 
@@ -66,7 +66,7 @@ Process with Swin2SR x4 and export the result as `detail-upscaled.webp`.
 The production interface should render the processed assets inside real HTML figures. Use this prompt only to explore composition, not as a final flattened UI asset.
 
 ```text
-Desktop product-interface composition reference for a browser-based local image editor called BG Studio, 16:9 canvas, dark near-black technical workbench, restrained acid-lime accent, one large upload area on the right and concise editorial headline on the left, four small floating image specimens arranged asymmetrically around the upload area: curly-hair portrait cutout, technical shoe cutout, delicate fern cutout, and camera resolution detail, thin crop marks and tiny monospace metadata, subtle depth with no glassmorphism, no gradients, no neon glow, no fake charts, no purple, no oversized rounded cards, clean premium creative-tool aesthetic, generous negative space, every control legible and physically plausible
+Desktop product-interface composition reference for a browser-based local image editor called Alphaveil, 16:9 canvas, dark near-black technical workbench, restrained acid-lime accent, one large upload area on the right and concise editorial headline on the left, four small floating image specimens arranged asymmetrically around the upload area: curly-hair portrait cutout, technical shoe cutout, delicate fern cutout, and camera resolution detail, thin crop marks and tiny monospace metadata, subtle depth with no glassmorphism, no gradients, no neon glow, no fake charts, no purple, no oversized rounded cards, clean premium creative-tool aesthetic, generous negative space, every control legible and physically plausible
 ```
 
 ## Logo Mark
@@ -74,7 +74,7 @@ Desktop product-interface composition reference for a browser-based local image 
 Generate the symbol separately from the wordmark. AI-generated text should not be used in the final logo.
 
 ```text
-Minimal geometric app icon for BG Studio, a browser tool for background removal, cropping, and image upscaling, construct one bold uppercase B from two crop-corner brackets and a clean negative-space cut through the right side, the removed section should subtly suggest a transparent layer peeling away, flat vector geometry, strong silhouette readable at 16 pixels, acid-lime symbol on near-black background, square 1:1 composition, no text, no initials besides the abstract B, no gradient, no shadow, no glow, no 3D, no camera aperture, no magic wand, no generic sparkle, no mockup presentation
+Minimal geometric app icon for Alphaveil, a browser tool for background removal, cropping, and image upscaling, construct one bold uppercase B from two crop-corner brackets and a clean negative-space cut through the right side, the removed section should subtly suggest a transparent layer peeling away, flat vector geometry, strong silhouette readable at 16 pixels, acid-lime symbol on near-black background, square 1:1 composition, no text, no initials besides the abstract B, no gradient, no shadow, no glow, no 3D, no camera aperture, no magic wand, no generic sparkle, no mockup presentation
 ```
 
 Export a 1024 x 1024 PNG, redraw the selected geometry as SVG, and test it at 16, 24, 32, and 128 pixels before replacing `public/favicon.svg` and the header mark.

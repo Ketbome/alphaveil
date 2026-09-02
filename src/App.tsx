@@ -167,7 +167,7 @@ export default function App() {
     try {
       const bg = format === 'jpeg' ? '#ffffff' : preview === 'checker' ? null : preview
       const blob = await exportBlob(current!, { format, background: bg, quality })
-      download(blob, `${active!.name}-bgstudio.${format === 'jpeg' ? 'jpg' : format}`)
+      download(blob, `${active!.name}-alphaveil.${format === 'jpeg' ? 'jpg' : format}`)
     } catch {
       setError(t.errors.export)
     }
