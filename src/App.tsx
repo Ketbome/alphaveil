@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  ArrowRight, Code2, Columns2, Crop, Focus, MonitorDown, PaintBucket, Plus, Download, Eraser, HardDrive, Languages, Loader2, LockKeyhole, Monitor, Moon, Scissors, Settings2, Sparkles, Sun, Trash2, Undo2,
+  ArrowRight, Code2, Columns2, Crop, Focus, MonitorDown, PaintBucket, Paintbrush, Plus, Download, Eraser, HardDrive, Languages, Loader2, LockKeyhole, Monitor, Moon, Scissors, Settings2, Sparkles, Sun, Trash2, Undo2,
 } from 'lucide-react'
 import type { Area } from 'react-easy-crop'
 import { engine, type Progress } from './lib/engine'
@@ -22,6 +22,7 @@ import { ImageQueue } from './components/ImageQueue'
 import { SuggestedActions, type SuggestedAction } from './components/SuggestedActions'
 import { Logo } from './components/Logo'
 import { CompareView } from './components/CompareView'
+import { MaskEditor } from './components/MaskEditor'
 import { Showcase } from './components/Showcase'
 
 type Format = 'png' | 'jpeg' | 'webp'
@@ -58,6 +59,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [cropSrc, setCropSrc] = useState<string | null>(null)
   const [compare, setCompare] = useState(false)
+  const [retouching, setRetouching] = useState(false)
   const [preview, setPreview] = useState<string>('checker')
   const [format, setFormat] = useState<Format>('png')
   const [quality, setQuality] = useState(0.92)
@@ -408,6 +410,7 @@ export default function App() {
               <Tool label={t.tool.removeBgHint(selectedBg.name)} onClick={removeBg} disabled={disabled} icon={<Eraser className="size-4" />} text={t.tool.removeBg} primary />
               <Tool label={t.tool.upscaleHint(scale, selectedSr.name)} onClick={upscale} disabled={disabled} icon={<Sparkles className="size-4" />} text={t.tool.upscale(scale)} />
               <Tool label={t.tool.trimHint} onClick={() => push(trimTransparent(current!), 'trim')} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
+              <Tool label={transparent ? t.retouch.hint : t.frame.needsAlpha} onClick={() => setRetouching(true)} disabled={disabled || !transparent} icon={<Paintbrush className="size-4" />} text={t.retouch.title} />
               <Popover placement="bottom-start" trigger={({ open }) => (
                 <Tooltip label={transparent ? t.frame.hint : t.frame.needsAlpha} placement="bottom">
                   <button type="button" disabled={disabled || !transparent} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition disabled:opacity-40 ${open ? 'bg-line' : 'hover:bg-line'}`}>
@@ -517,6 +520,7 @@ export default function App() {
       </main>
 
       {cropSrc && <CropDialog src={cropSrc} onCancel={() => setCropSrc(null)} onApply={applyCrop} />}
+      {retouching && current && <MaskEditor bitmap={current} source={blurSource} onCancel={() => setRetouching(false)} onApply={(b) => { setRetouching(false); push(b, 'retouch') }} />}
     </div>
   )
 }

@@ -72,6 +72,17 @@ export const es: Dict = {
     hint: 'Instala Alphaveil como aplicación. Con los modelos en caché funciona sin conexión.',
     ios: 'En iPhone o iPad: Compartir → Añadir a pantalla de inicio.',
   },
+  retouch: {
+    title: 'Retocar máscara',
+    hint: 'Pinta las zonas que el modelo no sacó o que borró de más',
+    erase: 'Borrar',
+    restore: 'Restaurar',
+    eraseHint: 'Pinta sobre el fondo que quedó para volverlo transparente.',
+    restoreHint: 'Pinta sobre partes del sujeto que se borraron para recuperarlas desde la foto original.',
+    size: 'Pincel',
+    softness: 'Suavidad',
+    apply: 'Aplicar retoque',
+  },
   showcase: {
     label: 'Resultados hechos con Alphaveil',
     alt: (model) => `Recorte generado localmente con ${model}`,

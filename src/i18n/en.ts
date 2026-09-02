@@ -70,6 +70,17 @@ export const en = {
     hint: 'Install Alphaveil as an app. Once the models are cached it works offline.',
     ios: 'On iPhone or iPad: Share → Add to Home Screen.',
   },
+  retouch: {
+    title: 'Retouch mask',
+    hint: 'Paint over areas the model missed or removed by mistake',
+    erase: 'Erase',
+    restore: 'Restore',
+    eraseHint: 'Paint over leftover background to make it transparent.',
+    restoreHint: 'Paint over parts of the subject that were removed to bring them back from the original photo.',
+    size: 'Brush',
+    softness: 'Softness',
+    apply: 'Apply retouch',
+  },
   showcase: {
     label: 'Results made with Alphaveil',
     alt: (model: string) => `Cutout produced locally with ${model}`,

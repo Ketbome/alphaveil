@@ -72,6 +72,17 @@ export const fr: Dict = {
     hint: "Installez Alphaveil comme application. Une fois les modèles en cache, elle fonctionne hors ligne.",
     ios: "Sur iPhone ou iPad : Partager → Sur l'écran d'accueil.",
   },
+  retouch: {
+    title: 'Retoucher le masque',
+    hint: "Peignez les zones que le modèle a oubliées ou retirées par erreur",
+    erase: 'Effacer',
+    restore: 'Restaurer',
+    eraseHint: "Peignez sur l'arrière-plan restant pour le rendre transparent.",
+    restoreHint: "Peignez sur les parties du sujet supprimées pour les récupérer depuis la photo d'origine.",
+    size: 'Pinceau',
+    softness: 'Douceur',
+    apply: 'Appliquer la retouche',
+  },
   showcase: {
     label: 'Résultats obtenus avec Alphaveil',
     alt: (model) => `Détourage produit localement avec ${model}`,

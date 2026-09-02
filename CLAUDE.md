@@ -22,7 +22,7 @@ Vite 8, React 19, TypeScript, Tailwind 4 (`@tailwindcss/vite`, theme tokens in `
 - `src/i18n/` — `en.ts` is the typed base dictionary (`Dict`); `es`, `pt`, `fr` must match it. `index.tsx` has the provider, `useI18n()`, URL-prefix detection (`/es/` wins over saved/browser language) and rewrites the URL on switch without reloading.
 - `scripts/localize-pages.ts` — post-build: localized static copies of `index.html` per language and `sitemap.xml` (do not add a static sitemap to `public/`).
 - `src/lib/theme.ts` — light / dark / system, stored in `localStorage`, applied as `data-theme` on `<html>`.
-- `src/components/` — `Tooltip` / `Popover` (Floating UI), `Dropzone`, `ImageQueue`, `CropDialog`, `ModelPicker`, `RuntimeStatus`, `SuggestedActions`, `CompareView`, `Showcase`.
+- `src/components/` — `Tooltip` / `Popover` (Floating UI), `Dropzone`, `ImageQueue`, `CropDialog`, `ModelPicker`, `RuntimeStatus`, `SuggestedActions`, `CompareView`, `Showcase`, `MaskEditor` (erase / restore brush over the alpha; restore copies pixels from the last opaque step, so it needs matching dimensions).
 - `public/showcase/*.webp` — real cutouts produced by the app (trimmed, ≤900 px, alpha). `Showcase` floats them around the upload card on desktop and as a strip on mobile; prompts to regenerate sources live in `docs/asset-prompts.md`.
 - `src/lib/history.ts` — `Step { bitmap, kind }` and `compareBase()`: the before/after curtain compares against the latest framing step (source, crop or trim), never across a crop.
 - `src/App.tsx` — image queue (max 8, one active, 6-step history each), toolbar, export, batch (`removeBgAll`, `downloadAll`).
