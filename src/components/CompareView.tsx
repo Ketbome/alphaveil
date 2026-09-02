@@ -45,7 +45,7 @@ export function CompareView({ before, after }: { before: Bitmap; after: Bitmap }
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       className="compare relative max-h-full max-w-full touch-none select-none overflow-hidden rounded-md shadow-2xl shadow-black/30"
-      style={{ aspectRatio: `${ratio}`, width: 'min(100%, calc((100dvh - 14rem) * ' + ratio + '))', ['--pos' as string]: `${pos}%` }}
+      style={{ aspectRatio: `${ratio}`, width: `min(100cqw - 2rem, (100cqh - 2rem) * ${ratio})`, ['--pos' as string]: `${pos}%` }}
     >
       <Layer bitmap={after} className="absolute inset-0 size-full object-contain" />
       <Layer bitmap={before} className={`absolute inset-0 size-full object-contain ${sweeping ? 'compare-sweep' : ''}`} style={{ clipPath: 'inset(0 calc(100% - var(--pos)) 0 0)' }} />

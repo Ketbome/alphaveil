@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  ArrowRight, Code2, Columns2, Crop, Download, Eraser, HardDrive, Languages, Loader2, LockKeyhole, Monitor, Moon, Scissors, Settings2, Sparkles, Sun, Trash2, Undo2,
+  ArrowRight, Code2, Columns2, Crop, Plus, Download, Eraser, HardDrive, Languages, Loader2, LockKeyhole, Monitor, Moon, Scissors, Settings2, Sparkles, Sun, Trash2, Undo2,
 } from 'lucide-react'
 import type { Area } from 'react-easy-crop'
 import { engine, type Progress } from './lib/engine'
@@ -8,6 +8,7 @@ import type { Bitmap, Status } from './lib/worker'
 import { BG_MODELS, NO_RUNTIME, SR_MODELS, SR_SCALE, modelAvailable, modelDevice, modelDtype, type ModelSpec, type Runtime } from './lib/models'
 import { cropBitmap, download, exportBlob, fileToBitmap, formatBytes, inspectAlpha, toDataUrl, toThumbnailDataUrl, trimTransparent } from './lib/image'
 import { useTheme, type Theme } from './lib/theme'
+import { compareBase, type Step, type StepKind } from './lib/history'
 import { LANGS, useI18n, type Lang } from './i18n'
 import { Dropzone } from './components/Dropzone'
 import { CropDialog } from './components/CropDialog'
@@ -25,7 +26,7 @@ type Format = 'png' | 'jpeg' | 'webp'
 interface Item {
   id: string
   name: string
-  history: Bitmap[]
+  history: Step[]
   thumbnail: string
 }
 
@@ -58,10 +59,11 @@ export default function App() {
   const [format, setFormat] = useState<Format>('png')
   const [quality, setQuality] = useState(0.92)
 
+  const addInput = useRef<HTMLInputElement>(null)
   const active = items.find((i) => i.id === activeId) ?? null
-  const current = active?.history.at(-1) ?? null
-  const original = active?.history[0] ?? null
-  const canCompare = !!active && active.history.length > 1
+  const current = active?.history.at(-1)?.bitmap ?? null
+  const before = active ? compareBase(active.history) : null
+  const canCompare = !!before
   const { transparent, trimmable } = useMemo(() => (current ? inspectAlpha(current) : { transparent: false, trimmable: false }), [current])
   const requestedBg = BG_MODELS.find((model) => model.id === bgModel) ?? BG_MODELS[0]
   const selectedBg = runtime && !modelAvailable(requestedBg, runtime)
@@ -77,14 +79,14 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('bgModel', selectedBg.id) } catch { /* private mode */ } }, [selectedBg.id])
   useEffect(() => { try { localStorage.setItem('srModel', srModel) } catch { /* private mode */ } }, [srModel])
 
-  const push = (b: Bitmap) => {
-    setItems((list) => list.map((i) => (i.id !== activeId ? i : { ...i, history: [...i.history, b].slice(-MAX_HISTORY), thumbnail: toThumbnailDataUrl(b) })))
+  const push = (b: Bitmap, kind: StepKind) => {
+    setItems((list) => list.map((i) => (i.id !== activeId ? i : { ...i, history: [...i.history, { bitmap: b, kind }].slice(-MAX_HISTORY), thumbnail: toThumbnailDataUrl(b) })))
   }
   const undo = () => {
     setItems((list) => list.map((i) => {
       if (i.id !== activeId || i.history.length < 2) return i
       const history = i.history.slice(0, -1)
-      return { ...i, history, thumbnail: toThumbnailDataUrl(history.at(-1)!) }
+      return { ...i, history, thumbnail: toThumbnailDataUrl(history.at(-1)!.bitmap) }
     }))
   }
   const remove = (id: string) => {
@@ -97,11 +99,11 @@ export default function App() {
 
   const onStatus = (s: Status) => setBusy(s.key === 'segmenting' ? t.busy.segmenting : t.busy.upscaling(s.done, s.total))
 
-  const run = async (fn: () => Promise<Bitmap>) => {
+  const run = async (kind: StepKind, fn: () => Promise<Bitmap>) => {
     setBusy(t.busy.loading)
     setError(null)
     try {
-      push(await fn())
+      push(await fn(), kind)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -119,7 +121,7 @@ export default function App() {
     for (const file of images.slice(0, Math.max(0, room))) {
       try {
         const bmp = await fileToBitmap(file)
-        added.push({ id: crypto.randomUUID(), name: file.name.replace(/\.[^.]+$/, ''), history: [bmp], thumbnail: toThumbnailDataUrl(bmp) })
+        added.push({ id: crypto.randomUUID(), name: file.name.replace(/\.[^.]+$/, ''), history: [{ bitmap: bmp, kind: 'source' }], thumbnail: toThumbnailDataUrl(bmp) })
       } catch {
         setError(t.errors.unsupported(file.name))
       }
@@ -138,7 +140,7 @@ export default function App() {
     return () => window.removeEventListener('paste', onPaste)
   })
 
-  const removeBg = () => run(async () => {
+  const removeBg = () => run('bg', async () => {
     const dtype = modelDtype(selectedBg, runtime!)
     const device = modelDevice(selectedBg, runtime!)
     setBusy(t.busy.preparing(selectedBg.name, device.toUpperCase(), dtype.toUpperCase()))
@@ -147,7 +149,7 @@ export default function App() {
     return engine.removeBg(current!, onStatus)
   })
 
-  const upscale = () => run(async () => {
+  const upscale = () => run('upscale', async () => {
     const dtype = modelDtype(selectedSr, runtime!)
     const device = modelDevice(selectedSr, runtime!)
     setBusy(t.busy.preparing(selectedSr.name, device.toUpperCase(), dtype.toUpperCase()))
@@ -158,7 +160,7 @@ export default function App() {
 
   const applyCrop = (a: Area) => {
     setCropSrc(null)
-    push(cropBitmap(current!, Math.round(a.x), Math.round(a.y), Math.round(a.width), Math.round(a.height)))
+    push(cropBitmap(current!, Math.round(a.x), Math.round(a.y), Math.round(a.width), Math.round(a.height)), 'crop')
   }
 
   const save = async () => {
@@ -181,7 +183,7 @@ export default function App() {
     suggestions.push({ id: 'upscale', label: t.tool.upscale(2), detail: selectedSr.name, icon: <Sparkles className="size-3.5" />, onClick: upscale })
   }
   if (current && trimmable) {
-    suggestions.push({ id: 'trim', label: t.tool.trim, detail: t.tool.trimDetail, icon: <Scissors className="size-3.5" />, onClick: () => push(trimTransparent(current)) })
+    suggestions.push({ id: 'trim', label: t.tool.trim, detail: t.tool.trimDetail, icon: <Scissors className="size-3.5" />, onClick: () => push(trimTransparent(current), 'trim') })
   }
 
   const themeIcon = theme === 'dark' ? <Moon className="size-5" /> : theme === 'light' ? <Sun className="size-5" /> : <Monitor className="size-5" />
@@ -281,7 +283,7 @@ export default function App() {
               <Tool label={t.tool.cropHint} onClick={() => setCropSrc(toDataUrl(current!))} disabled={disabled} icon={<Crop className="size-4" />} text={t.tool.crop} />
               <Tool label={t.tool.removeBgHint(selectedBg.name)} onClick={removeBg} disabled={disabled} icon={<Eraser className="size-4" />} text={t.tool.removeBg} primary />
               <Tool label={t.tool.upscaleHint(scale, selectedSr.name)} onClick={upscale} disabled={disabled} icon={<Sparkles className="size-4" />} text={t.tool.upscale(scale)} />
-              <Tool label={t.tool.trimHint} onClick={() => push(trimTransparent(current!))} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
+              <Tool label={t.tool.trimHint} onClick={() => push(trimTransparent(current!), 'trim')} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
               <span className="mx-1 h-5 w-px bg-line" />
               <Tool label={t.compare.hint} onClick={() => setCompare((v) => !v)} disabled={!canCompare || !!busy} icon={<Columns2 className="size-4" />} text={t.compare.toggle} active={compare && canCompare} />
               <Tool label={t.tool.undo} onClick={undo} disabled={(active.history.length ?? 0) < 2 || !!busy} icon={<Undo2 className="size-4" />} />
@@ -326,8 +328,17 @@ export default function App() {
 
             <SuggestedActions actions={suggestions} disabled={disabled} />
 
-            <div className={`relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 ${preview === 'checker' ? 'checker' : ''}`} style={preview === 'checker' ? undefined : { background: preview }}>
-              {current && (compare && canCompare && original ? <CompareView key={active.id + active.history.length} before={original} after={current} /> : <PreviewCanvas key={active.id + active.history.length} bitmap={current} label={t.preview(active.name)} />)}
+            <div className={`relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 [container-type:size] ${preview === 'checker' ? 'checker' : ''}`} style={preview === 'checker' ? undefined : { background: preview }}>
+              {current && (compare && before ? <CompareView key={active.id + active.history.length} before={before} after={current} /> : <PreviewCanvas key={active.id + active.history.length} bitmap={current} label={t.preview(active.name)} />)}
+              {!busy && items.length < MAX_IMAGES && (
+                <Tooltip label={t.queue.addHint} placement="top">
+                  <button type="button" onClick={() => addInput.current?.click()} aria-label={t.queue.addHint}
+                    className="absolute bottom-5 left-1/2 grid size-12 -translate-x-1/2 place-items-center rounded-full bg-accent-solid text-on-accent shadow-lg shadow-black/25 transition hover:scale-105 active:scale-95">
+                    <Plus className="size-6" />
+                  </button>
+                </Tooltip>
+              )}
+              <input ref={addInput} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) addFiles(Array.from(e.target.files)); e.target.value = '' }} />
               {busy && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/70 backdrop-blur-sm" role="status" aria-live="polite">
                   <div className="scanline pointer-events-none absolute inset-y-0 w-40" aria-hidden="true" />
