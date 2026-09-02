@@ -29,6 +29,10 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
   const [detecting, setDetecting] = useState(false)
   const [size, setSize] = useState(Math.max(12, Math.round(Math.max(bitmap.width, bitmap.height) / 30)))
   const [softness, setSoftness] = useState(0.5)
+  const [smart, setSmart] = useState(true)
+  const [tolerance, setTolerance] = useState(30)
+  const ref = useRef<[number, number, number] | null>(null)
+  const sourceData = useRef<Uint8ClampedArray | null>(null)
   const [zoom, setZoom] = useState(1)
   const [strokes, setStrokes] = useState(0)
   const canRestore = !!source && source.width === bitmap.width && source.height === bitmap.height
@@ -39,6 +43,7 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
     canvas.height = bitmap.height
     canvas.getContext('2d', { willReadFrequently: true })!.putImageData(new ImageData(bitmap.data as Uint8ClampedArray<ArrayBuffer>, bitmap.width, bitmap.height), 0, 0)
     sourceCanvas.current = canRestore ? toCanvas(source!) : null
+    sourceData.current = canRestore ? source!.data : bitmap.data
     const region = regionRef.current!
     region.width = bitmap.width
     region.height = bitmap.height
@@ -62,11 +67,38 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
     grad.addColorStop(1, `rgba(${tint},0)`)
     g.fillStyle = grad
     g.fillRect(0, 0, size, size)
-    return b
+    return Object.assign(b, { alpha: g.getImageData(0, 0, size, size).data })
   }
 
-  const dab = (ctx: CanvasRenderingContext2D, b: HTMLCanvasElement, x: number, y: number) => {
+  // Erase only pixels whose original color is close to the color sampled where
+  // the stroke started, so a rough stroke along the subject does not eat into it.
+  const smartErase = (ctx: CanvasRenderingContext2D, b: HTMLCanvasElement & { alpha: Uint8ClampedArray }, x: number, y: number) => {
+    const src = sourceData.current!
     const r = size / 2
+    const x0 = Math.max(0, Math.round(x - r)), y0 = Math.max(0, Math.round(y - r))
+    const w = Math.min(size, bitmap.width - x0), h = Math.min(size, bitmap.height - y0)
+    if (w <= 0 || h <= 0) return
+    const img = ctx.getImageData(x0, y0, w, h)
+    const [rr, rg, rb] = ref.current!
+    const tol = tolerance * 2.5
+    const feather = Math.max(8, tol * 0.4)
+    for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) {
+      const bi = ((py + y0 - Math.round(y - r)) * size + (px + x0 - Math.round(x - r))) * 4 + 3
+      const bw = (b.alpha[bi] ?? 0) / 255
+      if (bw === 0) continue
+      const si = ((py + y0) * bitmap.width + (px + x0)) * 4
+      const d = Math.hypot(src[si] - rr, src[si + 1] - rg, src[si + 2] - rb)
+      const k = Math.min(1, Math.max(0, (tol + feather - d) / feather))
+      if (k === 0) continue
+      const i = (py * w + px) * 4 + 3
+      img.data[i] = Math.round(img.data[i] * (1 - bw * k))
+    }
+    ctx.putImageData(img, x0, y0)
+  }
+
+  const dab = (ctx: CanvasRenderingContext2D, b: HTMLCanvasElement & { alpha: Uint8ClampedArray }, x: number, y: number) => {
+    const r = size / 2
+    if (mode === 'erase' && smart && ref.current) return smartErase(ctx, b, x, y)
     if (mode === 'detect') {
       const rc = regionRef.current!.getContext('2d', { willReadFrequently: true })!
       rc.globalCompositeOperation = 'source-over'
@@ -113,6 +145,12 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
     }
     e.currentTarget.setPointerCapture(e.pointerId)
     last.current = null
+    if (mode === 'erase' && smart) {
+      const p = toImage(e)
+      const i = (Math.min(bitmap.height - 1, Math.max(0, Math.round(p.y))) * bitmap.width + Math.min(bitmap.width - 1, Math.max(0, Math.round(p.x)))) * 4
+      const src = sourceData.current!
+      ref.current = [src[i], src[i + 1], src[i + 2]]
+    }
     paint(e)
   }
   const onMove = (e: ReactPointerEvent) => {
@@ -149,8 +187,9 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
       if (region[(y * width + x) * 4 + 3] > 0) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
     }
     if (x1 < 0) return
-    const pad = Math.round(Math.max(x1 - x0, y1 - y0) * 0.15) + 8
-    x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad); x1 = Math.min(width - 1, x1 + pad); y1 = Math.min(height - 1, y1 + pad)
+    const padX = Math.max(Math.round((x1 - x0) * 0.35), Math.round(width * 0.2))
+    const padY = Math.max(Math.round((y1 - y0) * 0.35), Math.round(height * 0.2))
+    x0 = Math.max(0, x0 - padX); y0 = Math.max(0, y0 - padY); x1 = Math.min(width - 1, x1 + padX); y1 = Math.min(height - 1, y1 + padY)
     const cw = x1 - x0 + 1, ch = y1 - y0 + 1
     const ctx = canvasRef.current!.getContext('2d', { willReadFrequently: true })!
     const current = ctx.getImageData(0, 0, width, height)
@@ -216,6 +255,20 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
           {t.retouch.softness}
           <input type="range" min={0} max={0.9} step={0.05} value={softness} onChange={(e) => setSoftness(Number(e.target.value))} className="w-20 accent-accent-solid" />
         </label>
+        {mode === 'erase' && (
+          <>
+            <label className="flex items-center gap-1.5 text-xs text-muted">
+              <input type="checkbox" checked={smart} onChange={(e) => setSmart(e.target.checked)} className="accent-accent-solid" />
+              {t.retouch.smart}
+            </label>
+            {smart && (
+              <label className="flex items-center gap-2 text-xs text-muted">
+                {t.retouch.tolerance}
+                <input type="range" min={5} max={80} value={tolerance} onChange={(e) => setTolerance(Number(e.target.value))} className="w-20 accent-accent-solid" />
+              </label>
+            )}
+          </>
+        )}
         <label className="flex items-center gap-2 text-xs text-muted">
           {t.crop.zoom}
           <input type="range" min={1} max={4} step={0.1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-20 accent-accent-solid" />
@@ -224,7 +277,7 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
         <button type="button" onClick={onCancel} className="ml-auto rounded-md p-1.5 hover:bg-line" aria-label={t.crop.close}><X className="size-5" /></button>
       </header>
       <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-1.5">
-        <p className="text-xs text-muted">{mode === 'erase' ? t.retouch.eraseHint : mode === 'restore' ? t.retouch.restoreHint : t.retouch.detectHint}</p>
+        <p className="text-xs text-muted">{mode === 'erase' ? (smart ? t.retouch.smartHint : t.retouch.eraseHint) : mode === 'restore' ? t.retouch.restoreHint : t.retouch.detectHint}</p>
         {mode === 'detect' && (
           <span className="ml-auto flex items-center gap-2">
             <button type="button" onClick={clearRegion} disabled={!hasRegion || detecting} className="rounded-md px-2 py-1 text-xs hover:bg-line disabled:opacity-40">{t.retouch.clear}</button>
