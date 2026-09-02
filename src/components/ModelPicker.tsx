@@ -8,9 +8,10 @@ interface Props {
   value: string
   runtime: Runtime
   onChange: (id: string) => void
+  onUnblock: (id: string) => void
 }
 
-export function ModelPicker({ title, models, value, runtime, onChange }: Props) {
+export function ModelPicker({ title, models, value, runtime, onChange, onUnblock }: Props) {
   const { t } = useI18n()
   return (
     <div className="w-full min-w-0" role="radiogroup" aria-label={title}>
@@ -45,10 +46,16 @@ export function ModelPicker({ title, models, value, runtime, onChange }: Props) 
                   <div className="mt-1 flex items-center gap-2 text-[10px] text-dim">
                     <span>{t.models.licenses[m.license] ?? m.license}</span><span>·</span><span className={fallback ? 'text-warn' : ''}>{device.toUpperCase()}</span>
                   </div>
-                  {fallback ? <div className="mt-1.5 text-[10px] leading-snug text-warn/80">{blocked ? t.models.blocked : t.models.fallback(runtime.maxStorageBuffersPerShaderStage, m.minStorageBuffers ?? 0)} {available ? t.models.useCpu : t.models.noCpu}</div> : null}
+                  {fallback && !blocked ? <div className="mt-1.5 text-[10px] leading-snug text-warn/80">{t.models.fallback(runtime.maxStorageBuffersPerShaderStage, m.minStorageBuffers ?? 0)} {available ? t.models.useCpu : t.models.noCpu}</div> : null}
                   {copy?.warning ? <div className="mt-1.5 text-[10px] leading-snug text-warn/80">{copy.warning}</div> : null}
                 </div>
               </button>
+              {blocked ? (
+                <div className="-mt-0.5 pb-1.5 pl-8 pr-2.5 text-[10px] leading-snug text-warn/80">
+                  {t.models.blocked} {available ? t.models.useCpu : t.models.noCpu}{' '}
+                  <button type="button" onClick={() => onUnblock(m.id)} className="font-semibold text-accent underline underline-offset-2">{t.models.unblock}</button>
+                </div>
+              ) : null}
             </li>
           )
         })}

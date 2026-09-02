@@ -1,5 +1,5 @@
 import { env, pipeline, AutoModel, AutoProcessor, EdgeTamModel, RawImage, Tensor, VitMatteForImageMatting, type PreTrainedModel, type Processor } from '@huggingface/transformers'
-import { MATTE_MODEL, SAM_MODEL, isGpuLimit } from './models'
+import { MATTE_MODEL, SAM_MODEL, isGpuLimit, isGpuLost } from './models'
 import type { Device, Runtime } from './models'
 
 env.allowLocalModels = false
@@ -47,6 +47,21 @@ type Segmenter = { model: PreTrainedModel; processor: Processor }
 const cache = new Map<string, Promise<Pipe | Segmenter>>()
 const current: Record<'bg' | 'sr', string | null> = { bg: null, sr: null }
 
+// An ONNX session holds its GPU buffers until it is disposed, so dropping a reference
+// leaks them for the life of the worker; enough leaked sessions cost the whole device.
+function release(entry: Promise<unknown> | null) {
+  void entry?.then((v) => {
+    const model = (v as { model?: { dispose?(): Promise<unknown> } }).model ?? (v as { dispose?(): Promise<unknown> })
+    return model?.dispose?.()
+  }).catch(() => {})
+}
+
+function dropCached(key: string | null) {
+  if (!key) return
+  release(cache.get(key) ?? null)
+  cache.delete(key)
+}
+
 type Adapter = {
   features?: { has(name: string): boolean }
   limits?: { maxStorageBuffersPerShaderStage?: number }
@@ -78,6 +93,9 @@ async function loadPipe(id: number, task: 'bg' | 'sr', model: string, revision: 
     promise.catch(() => cache.delete(key))
   }
   current[task] = key
+  // Only the sessions in use are worth keeping: switching model, device or dtype
+  // otherwise leaves the previous one holding its buffers for the rest of the session.
+  for (const k of cache.keys()) if (k !== current.bg && k !== current.sr) dropCached(k)
   return cache.get(key)!
 }
 
@@ -184,7 +202,8 @@ async function samEmbed(id: number, image: Bitmap, device: Device) {
 }
 
 async function samMask(points: Point[], box: Box | null): Promise<Masks> {
-  const state = await sam!
+  if (!sam) throw new Error('sam: no session')
+  const state = await sam
   const { embeddings, sizes } = state
   if (!embeddings || !sizes) throw new Error('sam: no embeddings')
   const proc = state.processor as unknown as {
@@ -316,7 +335,9 @@ self.onmessage = async (e: MessageEvent<Request>) => {
       }
     }
   } catch (err) {
-    if (isGpuLimit(err)) evict(msg.type)
+    // A lost device takes every session with it, not just the one that was running.
+    if (isGpuLost(err)) evictAll()
+    else if (isGpuLimit(err)) evict(msg.type)
     post({ id: msg.id, type: 'error', message: err instanceof Error ? err.message : String(err) })
   }
 }
@@ -325,12 +346,20 @@ self.onmessage = async (e: MessageEvent<Request>) => {
 // the model on the device the client picks instead.
 function evict(type: Request['type']) {
   if (type === 'removeBg' || type === 'load') {
-    if (current.bg) cache.delete(current.bg)
-    if (current.sr) cache.delete(current.sr)
+    dropCached(current.bg)
+    dropCached(current.sr)
     current.bg = current.sr = null
   } else if (type === 'upscale') {
-    if (current.sr) cache.delete(current.sr)
+    dropCached(current.sr)
     current.sr = null
-  } else if (type === 'samEmbed' || type === 'samMask') sam = null
-  else if (type === 'matte') matte = null
+  } else if (type === 'samEmbed' || type === 'samMask') { release(sam); sam = null }
+  else if (type === 'matte') { release(matte); matte = null }
+}
+
+function evictAll() {
+  for (const k of cache.keys()) dropCached(k)
+  current.bg = current.sr = null
+  release(sam)
+  release(matte)
+  sam = matte = null
 }

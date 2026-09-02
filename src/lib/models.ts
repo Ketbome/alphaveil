@@ -117,10 +117,25 @@ export function helperDevice(id: string, runtime: Runtime | null): Device {
   return runtime?.device === 'webgpu' && !runtime.blocked?.includes(id) ? 'webgpu' : 'wasm'
 }
 
-// onnxruntime-web aborts with this when a shader needs more storage buffers than
-// the adapter exposes; the limit is fixed per GPU, so the model has to move to WASM.
+const text = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+// onnxruntime-web aborts with this when a shader needs more storage buffers than the
+// adapter exposes. The limit is fixed per GPU, so the model has to move to WASM for
+// good; keep the match narrow, a false positive blocks the model on every later visit.
+const GPU_LIMIT = /maxStorageBuffers|storage ?buffers?[^.]*\b(exceed\w*|maximum|limit)|\b(exceed\w*|maximum|limit)[^.]*storage ?buffers?/i
+
+// The GPU device went away mid-run: tab backgrounded on mobile, driver reset, or the
+// memory of the leaked sessions. Every session built on it is dead, but the machine is
+// still capable, so these have to rebuild rather than move the model to WASM forever.
+const GPU_LOST = /device (is |was )?lost|external instance|compute pipeline|destroyed/i
+
 export function isGpuLimit(error: unknown) {
-  return /storage buffers|maxStorageBuffers/i.test(error instanceof Error ? error.message : String(error))
+  return GPU_LIMIT.test(text(error))
+}
+
+export function isGpuLost(error: unknown) {
+  const message = text(error)
+  return !GPU_LIMIT.test(message) && GPU_LOST.test(message)
 }
 
 export function modelDtype(model: ModelSpec, runtime: Runtime): DType {

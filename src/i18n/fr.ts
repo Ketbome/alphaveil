@@ -91,6 +91,7 @@ export const fr: Dict = {
     tolerance: 'Tolérance',
     select: "Cliquer l'objet",
     selectHint: 'Cliquez sur ce que vous voulez garder ou tracez un cadre autour. Plus de clics élargissent la sélection ; utilisez Exclure pour les parties en trop.',
+    selectFailed: "La sélection n'a pas pu être calculée. Passez à un autre outil puis revenez à Cliquer l'objet pour recharger le modèle.",
     shape: 'Forme',
     analyzing: "Analyse de l'image…",
     pointType: 'Type de point',
@@ -152,6 +153,7 @@ export const fr: Dict = {
     useCpu: 'Le CPU sera utilisé.',
     noCpu: 'Désactivé sur CPU à cause de sa consommation mémoire.',
     blocked: 'Ce GPU n\'a plus assez de buffers de shader pour ce modèle.',
+    unblock: 'Réessayer sur le GPU',
     entries: {
       'Xenova/modnet': { profile: 'Compatible · rapide', hint: 'Optimisé pour les personnes, les cheveux et la visio.' },
       'briaai/RMBG-1.4': { profile: 'Général · non commercial', hint: 'Bon équilibre pour produits, personnes et objets.', warning: "Les poids n'autorisent qu'un usage non commercial." },

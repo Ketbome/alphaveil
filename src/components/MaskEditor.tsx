@@ -37,6 +37,7 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
   const [masks, setMasks] = useState<Masks | null>(null)
   const [variant, setVariant] = useState(0)
   const [embedding, setEmbedding] = useState<'idle' | 'loading' | 'ready'>('idle')
+  const [failed, setFailed] = useState(false)
   const [refining, setRefining] = useState(false)
   const embedded = useRef(false)
   const [hasRegion, setHasRegion] = useState(false)
@@ -180,9 +181,19 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     setPoints(nextPoints)
     setBox(nextBox)
     if (!nextPoints.length && !nextBox) { setMasks(null); return }
-    const m = await onSamMask(nextPoints, nextBox)
-    setMasks(m)
-    setVariant(m.best)
+    setFailed(false)
+    try {
+      const m = await onSamMask(nextPoints, nextBox)
+      setMasks(m)
+      setVariant(m.best)
+    } catch {
+      // The session is gone and could not be rebuilt: drop the embedding so coming
+      // back to this tool loads the model again instead of failing on every click.
+      embedded.current = false
+      setEmbedding('idle')
+      setMasks(null)
+      setFailed(true)
+    }
   }
 
   const addPoint = (e: ReactPointerEvent) => {
@@ -190,7 +201,7 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     return prompt([...points, { x: Math.round(p.x), y: Math.round(p.y), label: (e.altKey ? !positive : positive) ? 1 : 0 } as Point], box)
   }
 
-  const clearPrompt = () => { setPoints([]); setBox(null); setMasks(null) }
+  const clearPrompt = () => { setPoints([]); setBox(null); setMasks(null); setFailed(false) }
 
   const selected = (): Mask | null => {
     if (!masks) return null
@@ -433,7 +444,7 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
         <button type="button" onClick={onCancel} className="ml-auto rounded-md p-1.5 hover:bg-line" aria-label={t.crop.close}><X className="size-5" /></button>
       </header>
       <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-1.5">
-        <p className="text-xs text-muted">{mode === 'select' ? (embedding === 'loading' ? t.retouch.analyzing : t.retouch.selectHint) : mode === 'erase' ? (smart ? t.retouch.smartHint : t.retouch.eraseHint) : mode === 'restore' ? t.retouch.restoreHint : t.retouch.detectHint}</p>
+        <p className={`text-xs ${failed && mode === 'select' ? 'text-danger' : 'text-muted'}`}>{mode === 'select' ? (failed ? t.retouch.selectFailed : embedding === 'loading' ? t.retouch.analyzing : t.retouch.selectHint) : mode === 'erase' ? (smart ? t.retouch.smartHint : t.retouch.eraseHint) : mode === 'restore' ? t.retouch.restoreHint : t.retouch.detectHint}</p>
         {mode === 'select' && (
           <span className="ml-auto flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-0.5 rounded-md bg-panel p-0.5" role="radiogroup" aria-label={t.retouch.pointType}>

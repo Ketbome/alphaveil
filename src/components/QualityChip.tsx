@@ -9,10 +9,11 @@ interface Props {
   value: ModelSpec
   runtime: Runtime
   onChange: (id: string) => void
+  onUnblock: (id: string) => void
   compact?: boolean
 }
 
-export function QualityChip({ value, runtime, onChange, compact }: Props) {
+export function QualityChip({ value, runtime, onChange, onUnblock, compact }: Props) {
   const { t } = useI18n()
   const [details, setDetails] = useState(false)
   const tier = value.tier ? t.quality.tiers[value.tier] : null
@@ -49,7 +50,7 @@ export function QualityChip({ value, runtime, onChange, compact }: Props) {
             })}
           </ul>
           <button type="button" onClick={() => setDetails((v) => !v)} className="px-1 text-xs text-dim underline-offset-2 hover:text-accent hover:underline">{t.quality.details}</button>
-          {details && <ModelPicker title={t.models.bg} models={BG_MODELS} value={value.id} runtime={runtime} onChange={(id) => { onChange(id); close() }} />}
+          {details && <ModelPicker title={t.models.bg} models={BG_MODELS} value={value.id} runtime={runtime} onChange={(id) => { onChange(id); close() }} onUnblock={onUnblock} />}
         </div>
       )}
     </Popover>

@@ -89,6 +89,7 @@ export const en = {
     tolerance: 'Tolerance',
     select: 'Click object',
     selectHint: 'Click the object you want, or drag a box around it. Add more clicks to grow the selection; use Exclude for parts to leave out.',
+    selectFailed: 'The selection could not be computed. Switch to another tool and back to Click object to load the model again.',
     shape: 'Shape',
     analyzing: 'Analyzing the image…',
     pointType: 'Point type',
@@ -150,6 +151,7 @@ export const en = {
     useCpu: 'CPU will be used.',
     noCpu: 'Not enabled on CPU because of its memory usage.',
     blocked: 'This GPU ran out of shader buffers with this model.',
+    unblock: 'Try on GPU again',
     entries: {
       'Xenova/modnet': { profile: 'Compatible · fast', hint: 'Optimized for people, hair and video calls.' },
       'briaai/RMBG-1.4': { profile: 'General · non-commercial', hint: 'Good balance for products, people and objects.', warning: 'The weights allow non-commercial use only.' },

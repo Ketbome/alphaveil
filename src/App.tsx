@@ -5,7 +5,7 @@ import {
 import type { Area } from 'react-easy-crop'
 import { engine, type Progress } from './lib/engine'
 import type { Bitmap, Box, Point, Status } from './lib/worker'
-import { BG_MODELS, MATTE_MODEL, NO_RUNTIME, SAM_MODEL, SR_MODELS, SR_SCALE, helperDevice, isGpuLimit, modelAvailable, modelDevice, modelDtype, type ModelSpec, type Runtime, type Tier } from './lib/models'
+import { BG_MODELS, MATTE_MODEL, NO_RUNTIME, SAM_MODEL, SR_MODELS, SR_SCALE, helperDevice, isGpuLimit, isGpuLost, modelAvailable, modelDevice, modelDtype, type ModelSpec, type Runtime, type Tier } from './lib/models'
 import { composeBackdrop, cropBitmap, download, exportBlob, fileToBitmap, formatBytes, inspectAlpha, resizeBitmap, smartCrop, toDataUrl, toThumbnailDataUrl } from './lib/image'
 import { zipSync } from 'fflate'
 import { useTheme, type Theme } from './lib/theme'
@@ -108,6 +108,20 @@ export default function App() {
     try { localStorage.setItem('bgModel', id) } catch { /* private mode */ }
   }
 
+  const unblockGpu = (id: string) => {
+    const rt = runtime ?? NO_RUNTIME
+    const blocked = (rt.blocked ?? []).filter((b) => b !== id)
+    try { localStorage.setItem('gpuBlocked', JSON.stringify(blocked)) } catch { /* private mode */ }
+    setRuntime({ ...rt, blocked })
+  }
+
+  const blockGpu = (id: string, rt: Runtime) => {
+    const blocked = [...(rt.blocked ?? []), id]
+    try { localStorage.setItem('gpuBlocked', JSON.stringify(blocked)) } catch { /* private mode */ }
+    setRuntime({ ...rt, blocked })
+    return { ...rt, blocked }
+  }
+
   // Some GPUs expose fewer storage buffers than a model's shaders need. The limit
   // only shows up when the model runs, so move that model to WASM and try once more.
   const onGpuLimit = async <T,>(id: string, fn: (rt: Runtime) => Promise<T>) => {
@@ -115,11 +129,12 @@ export default function App() {
     try {
       return await fn(rt)
     } catch (e) {
+      // The device went away and the worker dropped every session built on it. The
+      // machine is still capable, so rebuild and run once more instead of blaming the
+      // model: blocking it here would move it to the CPU on every later visit.
+      if (isGpuLost(e)) return await fn(rt)
       if (!isGpuLimit(e) || rt.blocked?.includes(id)) throw e
-      const blocked = [...(rt.blocked ?? []), id]
-      try { localStorage.setItem('gpuBlocked', JSON.stringify(blocked)) } catch { /* private mode */ }
-      setRuntime({ ...rt, blocked })
-      return await fn({ ...rt, blocked })
+      return await fn(blockGpu(id, rt))
     }
   }
 
@@ -237,12 +252,30 @@ export default function App() {
     }
   }
 
-  const samEmbed = async (image: Bitmap) => {
+  const samImage = useRef<Bitmap | null>(null)
+  const samEmbed = async (image: Bitmap, on?: Runtime) => {
+    samImage.current = image
+    const embed = (rt: Runtime) => engine.samEmbed(image, helperDevice(SAM_MODEL.id, rt), setProgress, () => {})
     try {
-      await onGpuLimit(SAM_MODEL.id, (rt) => engine.samEmbed(image, helperDevice(SAM_MODEL.id, rt), setProgress, () => {}))
+      if (on) await embed(on)
+      else await onGpuLimit(SAM_MODEL.id, embed)
     } finally { setProgress(null) }
   }
-  const samMask = (points: Point[], box: Box | null) => engine.samMask(points, box)
+  // A prompt that blows the GPU limit drops the session in the worker, so every later
+  // click has nothing to run against. Move the model to WASM when that was the cause,
+  // embed the same image again and retry once.
+  const samMask = async (points: Point[], box: Box | null) => {
+    try {
+      return await engine.samMask(points, box)
+    } catch (e) {
+      const image = samImage.current
+      const rt = runtime ?? NO_RUNTIME
+      const limit = isGpuLimit(e)
+      if (!image || (limit && rt.blocked?.includes(SAM_MODEL.id))) throw e
+      await samEmbed(image, limit ? blockGpu(SAM_MODEL.id, rt) : undefined)
+      return engine.samMask(points, box)
+    }
+  }
   const matte = async (image: Bitmap) => {
     try {
       return await onGpuLimit(MATTE_MODEL.id, (rt) => engine.matte(image, helperDevice(MATTE_MODEL.id, rt), setProgress, () => {}))
@@ -453,8 +486,8 @@ export default function App() {
             <Tooltip label={t.models.open}><button type="button" className="rounded-md p-1.5 hover:bg-line" aria-label={t.models.open}><Settings2 className="size-5" /></button></Tooltip>
           )}>
             <div className="flex w-[min(22rem,calc(100vw-3.5rem))] min-w-0 flex-col gap-4">
-              <ModelPicker title={t.models.bg} models={BG_MODELS} value={selectedBg.id} runtime={runtime ?? NO_RUNTIME} onChange={chooseBg} />
-              <ModelPicker title={t.models.sr} models={SR_MODELS} value={srModel} runtime={runtime ?? NO_RUNTIME} onChange={setSrModel} />
+              <ModelPicker title={t.models.bg} models={BG_MODELS} value={selectedBg.id} runtime={runtime ?? NO_RUNTIME} onChange={chooseBg} onUnblock={unblockGpu} />
+              <ModelPicker title={t.models.sr} models={SR_MODELS} value={srModel} runtime={runtime ?? NO_RUNTIME} onChange={setSrModel} onUnblock={unblockGpu} />
               <p className="px-1 text-[11px] leading-snug text-dim">{t.models.note}</p>
             </div>
           </Popover>
@@ -486,7 +519,7 @@ export default function App() {
                   </div>
                   <div className="flex items-center justify-between gap-4 py-3">
                     <span className="text-muted">{t.quality.label}</span>
-                    <QualityChip value={selectedBg} runtime={runtime ?? NO_RUNTIME} onChange={chooseBg} compact />
+                    <QualityChip value={selectedBg} runtime={runtime ?? NO_RUNTIME} onChange={chooseBg} onUnblock={unblockGpu} compact />
                   </div>
                 </div>
               </section>
@@ -502,7 +535,7 @@ export default function App() {
             <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-2 sm:px-3" role="toolbar" aria-label={t.appName}>
               <Tool label={t.tool.cropHint} onClick={() => setCropSrc(toDataUrl(current!))} disabled={disabled} icon={<Crop className="size-4" />} text={t.tool.crop} />
               <Tool label={t.tool.removeBgHint(selectedBg.name)} onClick={removeBg} disabled={disabled} icon={<Eraser className="size-4" />} text={t.tool.removeBg} primary />
-              <QualityChip value={selectedBg} runtime={runtime ?? NO_RUNTIME} onChange={chooseBg} compact />
+              <QualityChip value={selectedBg} runtime={runtime ?? NO_RUNTIME} onChange={chooseBg} onUnblock={unblockGpu} compact />
               <Tool label={t.tool.upscaleHint(scale, selectedSr.name)} onClick={upscale} disabled={disabled} icon={<Sparkles className="size-4" />} text={t.tool.upscale(scale)} />
               <Tool label={t.tool.trimHint} onClick={() => bounds && reframe('trim', bounds.x, bounds.y, bounds.width, bounds.height)} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
               <Tool label={t.retouch.hint} onClick={() => setRetouching('erase')} disabled={disabled} icon={<Paintbrush className="size-4" />} text={t.retouch.title} />
