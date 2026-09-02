@@ -9,7 +9,7 @@ Vite 8, React 19, TypeScript, Tailwind 4 (`@tailwindcss/vite`, theme tokens in `
 ## Commands
 
 - `npm run dev` — dev server at `/alphaveil/`
-- `npm run build` — `tsc -b && vite build`
+- `npm run build` — `tsc -b && vite build && node scripts/localize-pages.ts` (emits `dist/{es,pt,fr}/index.html` + sitemap with hreflang)
 - `npm run lint` — oxlint
 
 ## Structure
@@ -18,7 +18,8 @@ Vite 8, React 19, TypeScript, Tailwind 4 (`@tailwindcss/vite`, theme tokens in `
 - `src/lib/engine.ts` — promise-based client for the worker (progress/status callbacks).
 - `src/lib/models.ts` — model catalog (ids, dtypes per device, sizes, licenses).
 - `src/lib/image.ts` — canvas helpers: file → bitmap, crop, trim, export.
-- `src/i18n/` — `en.ts` is the typed base dictionary (`Dict`); `es`, `pt`, `fr` must match it. `index.tsx` has the provider, `useI18n()` and browser-language detection.
+- `src/i18n/` — `en.ts` is the typed base dictionary (`Dict`); `es`, `pt`, `fr` must match it. `index.tsx` has the provider, `useI18n()`, URL-prefix detection (`/es/` wins over saved/browser language) and rewrites the URL on switch without reloading.
+- `scripts/localize-pages.ts` — post-build: localized static copies of `index.html` per language and `sitemap.xml` (do not add a static sitemap to `public/`).
 - `src/lib/theme.ts` — light / dark / system, stored in `localStorage`, applied as `data-theme` on `<html>`.
 - `src/components/` — `Tooltip` / `Popover` (Floating UI), `Dropzone`, `ImageQueue`, `CropDialog`, `ModelPicker`, `RuntimeStatus`, `SuggestedActions`.
 - `src/lib/history.ts` — `Step { bitmap, kind }` and `compareBase()`: the before/after curtain compares against the latest framing step (source, crop or trim), never across a crop.

@@ -15,7 +15,21 @@ export const LANGS: { code: Lang; label: string }[] = [
 
 const dicts: Record<Lang, Dict> = { en, es, pt, fr }
 
+const BASE = import.meta.env.BASE_URL
+
+export function langFromPath(pathname: string, base = BASE): Lang | null {
+  const rest = pathname.startsWith(base) ? pathname.slice(base.length) : pathname.replace(/^\//, '')
+  const code = rest.split('/')[0]
+  return code in dicts ? (code as Lang) : null
+}
+
+export function pathForLang(lang: Lang, base = BASE) {
+  return lang === 'en' ? base : `${base}${lang}/`
+}
+
 function detect(): Lang {
+  const fromPath = langFromPath(location.pathname)
+  if (fromPath) return fromPath
   try {
     const saved = localStorage.getItem('lang')
     if (saved && saved in dicts) return saved as Lang
@@ -38,6 +52,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     document.title = t.seo.title
     document.querySelector('meta[name="description"]')?.setAttribute('content', t.seo.description)
     try { localStorage.setItem('lang', lang) } catch { /* private mode */ }
+    const path = pathForLang(lang)
+    if (location.pathname !== path) history.replaceState(null, '', path + location.search + location.hash)
   }, [lang, t])
 
   const value = useMemo(() => ({ lang, setLang, t }), [lang, t])

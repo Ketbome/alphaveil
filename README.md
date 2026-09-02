@@ -34,7 +34,7 @@ Models are downloaded at pinned Hugging Face revisions and kept in the browser C
 
 Vite 8 · React 19 · TypeScript · Tailwind 4 · [@huggingface/transformers](https://github.com/huggingface/transformers.js) v4 · [@floating-ui/react](https://floating-ui.com) (tooltips / popovers) · [react-easy-crop](https://github.com/ValentinH/react-easy-crop)
 
-Inference runs in a Web Worker (`src/lib/worker.ts`); the UI talks to it through `src/lib/engine.ts`. UI strings live in `src/i18n/` (English is the typed source of truth). SEO / Open Graph metadata is static in `index.html` (English) and `title` / `description` are swapped at runtime per language.
+Inference runs in a Web Worker (`src/lib/worker.ts`); the UI talks to it through `src/lib/engine.ts`. UI strings live in `src/i18n/` (English is the typed source of truth). SEO / Open Graph metadata is static per language: the build emits `/`, `/es/`, `/pt/` and `/fr/` with localized title, description, Open Graph tags and `hreflang` links, plus a sitemap listing all four.
 
 ## Development
 

@@ -186,6 +186,40 @@ export default function App() {
     suggestions.push({ id: 'trim', label: t.tool.trim, detail: t.tool.trimDetail, icon: <Scissors className="size-3.5" />, onClick: () => push(trimTransparent(current), 'trim') })
   }
 
+  const exportMenu = (
+        <Popover trigger={({ open }) => (
+          <button type="button" className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm hover:bg-line ${open ? 'bg-line' : ''}`}><Settings2 className="size-4" />{t.tool.export}</button>
+        )}>
+          <div className="w-64 space-y-3 text-sm">
+            <label className="block">
+              <span className="text-xs text-muted">{t.exportOpts.format}</span>
+              <select value={format} onChange={(e) => setFormat(e.target.value as Format)} className="mt-1 w-full rounded-md border border-line bg-ink px-2 py-1.5">
+                <option value="png">{t.exportOpts.png}</option>
+                <option value="webp">{t.exportOpts.webp}</option>
+                <option value="jpeg">{t.exportOpts.jpg}</option>
+              </select>
+            </label>
+            {format !== 'png' && (
+              <label className="block">
+                <span className="text-xs text-muted">{t.exportOpts.quality(Math.round(quality * 100))}</span>
+                <input type="range" min={0.5} max={1} step={0.01} value={quality} onChange={(e) => setQuality(Number(e.target.value))} className="mt-1 w-full accent-accent-solid" />
+              </label>
+            )}
+            <div>
+              <span className="text-xs text-muted">{t.exportOpts.background}</span>
+              <div className="mt-1 flex gap-1.5" role="radiogroup" aria-label={t.exportOpts.background}>
+                {['checker', '#ffffff', '#000000', '#0ea5e9', '#f43f5e', '#facc15'].map((c) => (
+                  <button key={c} type="button" role="radio" aria-checked={preview === c} onClick={() => setPreview(c)} aria-label={c === 'checker' ? t.exportOpts.checker : c}
+                    className={`size-7 rounded-md border-2 ${preview === c ? 'border-accent' : 'border-line'} ${c === 'checker' ? 'checker' : ''}`}
+                    style={c === 'checker' ? undefined : { background: c }} />
+                ))}
+                <input type="color" value={preview === 'checker' ? '#ffffff' : preview} onChange={(e) => setPreview(e.target.value)} aria-label={t.exportOpts.background} className="size-7 cursor-pointer rounded-md border-2 border-line bg-transparent" />
+              </div>
+            </div>
+          </div>
+        </Popover>
+  )
+
   const themeIcon = theme === 'dark' ? <Moon className="size-5" /> : theme === 'light' ? <Sun className="size-5" /> : <Monitor className="size-5" />
 
   return (
@@ -196,8 +230,8 @@ export default function App() {
           <span className="font-display text-[1.35rem] leading-none tracking-tight">{t.appName}</span>
           <span className="hidden border-l border-line pl-2 text-xs text-dim md:inline">{t.tagline}</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <RuntimeStatus runtime={runtime} dtype={bgDtype} device={bgDevice} />
+        <div className="flex items-center gap-0.5 sm:gap-1.5">
+          <span className="hidden sm:inline-flex"><RuntimeStatus runtime={runtime} dtype={bgDtype} device={bgDevice} /></span>
           <Popover trigger={() => (
             <Tooltip label={t.language}><button type="button" className="rounded-md p-1.5 hover:bg-line" aria-label={t.language}><Languages className="size-5" /></button></Tooltip>
           )}>
@@ -249,10 +283,10 @@ export default function App() {
         {!active ? (
           <div className="relative flex flex-1 overflow-y-auto">
             <div className="workspace-grid pointer-events-none absolute inset-0" />
-            <div className="relative mx-auto grid w-full max-w-6xl items-center gap-8 px-5 py-8 md:px-8 lg:grid-cols-[0.82fr_1.18fr] lg:gap-14 lg:py-10">
-              <section className="max-w-lg">
+            <div className="relative mx-auto grid w-full max-w-6xl items-center gap-6 px-4 py-5 sm:px-5 sm:py-8 md:px-8 lg:grid-cols-[0.82fr_1.18fr] lg:gap-14 lg:py-10">
+              <section className="order-last max-w-lg lg:order-none">
                 <div className="rise mb-5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">{t.hero.kicker}</div>
-                <h1 className="rise max-w-md font-display text-5xl leading-[0.92] tracking-[-0.02em] sm:text-6xl lg:text-7xl">
+                <h1 className="rise max-w-md font-display text-4xl leading-[0.92] tracking-[-0.02em] sm:text-6xl lg:text-7xl">
                   {t.hero.title1}<br /><span className="italic text-accent">{t.hero.title2}</span>
                 </h1>
                 <p className="rise mt-5 max-w-md text-sm leading-relaxed text-muted sm:text-base" style={{ animationDelay: '120ms' }}>{t.hero.body}</p>
@@ -279,47 +313,17 @@ export default function App() {
           <>
             <ImageQueue items={items.map((i) => ({ id: i.id, name: i.name, thumbnail: i.thumbnail, steps: i.history.length }))} activeId={activeId} disabled={!!busy} max={MAX_IMAGES} onSelect={setActiveId} onRemove={remove} onFiles={addFiles} />
 
-            <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-3 py-2" role="toolbar" aria-label={t.appName}>
+            <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-2 sm:px-3 md:flex-nowrap md:overflow-x-auto" role="toolbar" aria-label={t.appName}>
               <Tool label={t.tool.cropHint} onClick={() => setCropSrc(toDataUrl(current!))} disabled={disabled} icon={<Crop className="size-4" />} text={t.tool.crop} />
               <Tool label={t.tool.removeBgHint(selectedBg.name)} onClick={removeBg} disabled={disabled} icon={<Eraser className="size-4" />} text={t.tool.removeBg} primary />
               <Tool label={t.tool.upscaleHint(scale, selectedSr.name)} onClick={upscale} disabled={disabled} icon={<Sparkles className="size-4" />} text={t.tool.upscale(scale)} />
               <Tool label={t.tool.trimHint} onClick={() => push(trimTransparent(current!), 'trim')} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
-              <span className="mx-1 h-5 w-px bg-line" />
+              <span className="mx-1 hidden h-5 w-px bg-line md:inline" />
               <Tool label={t.compare.hint} onClick={() => setCompare((v) => !v)} disabled={!canCompare || !!busy} icon={<Columns2 className="size-4" />} text={t.compare.toggle} active={compare && canCompare} />
               <Tool label={t.tool.undo} onClick={undo} disabled={(active.history.length ?? 0) < 2 || !!busy} icon={<Undo2 className="size-4" />} />
               <Tool label={t.tool.remove} onClick={() => remove(active.id)} disabled={!!busy} icon={<Trash2 className="size-4" />} />
-              <div className="ml-auto flex shrink-0 items-center gap-1">
-                <Popover trigger={({ open }) => (
-                  <button type="button" className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm hover:bg-line ${open ? 'bg-line' : ''}`}><Settings2 className="size-4" />{t.tool.export}</button>
-                )}>
-                  <div className="w-64 space-y-3 text-sm">
-                    <label className="block">
-                      <span className="text-xs text-muted">{t.exportOpts.format}</span>
-                      <select value={format} onChange={(e) => setFormat(e.target.value as Format)} className="mt-1 w-full rounded-md border border-line bg-ink px-2 py-1.5">
-                        <option value="png">{t.exportOpts.png}</option>
-                        <option value="webp">{t.exportOpts.webp}</option>
-                        <option value="jpeg">{t.exportOpts.jpg}</option>
-                      </select>
-                    </label>
-                    {format !== 'png' && (
-                      <label className="block">
-                        <span className="text-xs text-muted">{t.exportOpts.quality(Math.round(quality * 100))}</span>
-                        <input type="range" min={0.5} max={1} step={0.01} value={quality} onChange={(e) => setQuality(Number(e.target.value))} className="mt-1 w-full accent-accent-solid" />
-                      </label>
-                    )}
-                    <div>
-                      <span className="text-xs text-muted">{t.exportOpts.background}</span>
-                      <div className="mt-1 flex gap-1.5" role="radiogroup" aria-label={t.exportOpts.background}>
-                        {['checker', '#ffffff', '#000000', '#0ea5e9', '#f43f5e', '#facc15'].map((c) => (
-                          <button key={c} type="button" role="radio" aria-checked={preview === c} onClick={() => setPreview(c)} aria-label={c === 'checker' ? t.exportOpts.checker : c}
-                            className={`size-7 rounded-md border-2 ${preview === c ? 'border-accent' : 'border-line'} ${c === 'checker' ? 'checker' : ''}`}
-                            style={c === 'checker' ? undefined : { background: c }} />
-                        ))}
-                        <input type="color" value={preview === 'checker' ? '#ffffff' : preview} onChange={(e) => setPreview(e.target.value)} aria-label={t.exportOpts.background} className="size-7 cursor-pointer rounded-md border-2 border-line bg-transparent" />
-                      </div>
-                    </div>
-                  </div>
-                </Popover>
+              <div className="ml-auto hidden shrink-0 items-center gap-1 md:flex">
+                {exportMenu}
                 <button type="button" onClick={save} disabled={disabled} className="flex items-center gap-1.5 rounded-lg bg-accent-solid px-3 py-1.5 text-sm font-semibold text-on-accent hover:brightness-110 disabled:opacity-40">
                   <Download className="size-4" />{t.tool.download}
                 </button>
@@ -333,7 +337,7 @@ export default function App() {
               {!busy && items.length < MAX_IMAGES && (
                 <Tooltip label={t.queue.addHint} placement="top">
                   <button type="button" onClick={() => addInput.current?.click()} aria-label={t.queue.addHint}
-                    className="absolute bottom-5 left-1/2 grid size-12 -translate-x-1/2 place-items-center rounded-full bg-accent-solid text-on-accent shadow-lg shadow-black/25 transition hover:scale-105 active:scale-95">
+                    className="absolute bottom-5 left-1/2 hidden size-12 -translate-x-1/2 place-items-center rounded-full bg-accent-solid text-on-accent shadow-lg shadow-black/25 transition hover:scale-105 active:scale-95 md:grid">
                     <Plus className="size-6" />
                   </button>
                 </Tooltip>
@@ -354,10 +358,21 @@ export default function App() {
               )}
             </div>
 
-            <footer className="flex shrink-0 items-center justify-between gap-4 overflow-x-auto border-t border-line px-4 py-1.5 font-mono text-[10px] text-dim">
+            <footer className="flex shrink-0 items-center justify-between gap-4 overflow-x-auto border-t border-line px-3 py-1.5 font-mono text-[10px] text-dim sm:px-4">
               <span className="shrink-0">{current!.width} × {current!.height} PX{transparent ? ` · ${t.footer.alpha}` : ''} · {t.footer.step(active.history.length)}</span>
-              {error ? <span role="alert" className="shrink-0 text-danger">{error}</span> : <span className="shrink-0">{t.footer.limit}</span>}
+              {error ? <span role="alert" className="shrink-0 text-danger">{error}</span> : <span className="hidden shrink-0 sm:inline">{t.footer.limit}</span>}
+              <span className="sm:hidden"><RuntimeStatus runtime={runtime} dtype={bgDtype} device={bgDevice} /></span>
             </footer>
+            <div className="flex shrink-0 items-center gap-2 border-t border-line bg-panel px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:hidden">
+              <button type="button" onClick={() => addInput.current?.click()} disabled={!!busy || items.length >= MAX_IMAGES} aria-label={t.queue.addHint}
+                className="grid size-10 shrink-0 place-items-center rounded-full border border-line text-accent disabled:opacity-40">
+                <Plus className="size-5" />
+              </button>
+              {exportMenu}
+              <button type="button" onClick={save} disabled={disabled} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-accent-solid px-3 py-2.5 text-sm font-semibold text-on-accent disabled:opacity-40">
+                <Download className="size-4" />{t.tool.download}
+              </button>
+            </div>
           </>
         )}
       </main>

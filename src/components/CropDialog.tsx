@@ -34,9 +34,9 @@ export function CropDialog({ src, onCancel, onApply }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-ink/95 backdrop-blur" role="dialog" aria-modal="true" aria-label={t.crop.title}>
-      <header className="flex items-center justify-between border-b border-line px-4 py-3">
+      <header className="flex items-center justify-between gap-2 border-b border-line px-3 py-3 sm:px-4">
         <div className="font-medium">{t.crop.title}</div>
-        <div className="flex items-center gap-1 rounded-lg bg-panel p-1" role="radiogroup">
+        <div className="flex items-center gap-0.5 overflow-x-auto rounded-lg bg-panel p-1 sm:gap-1" role="radiogroup">
           {RATIOS.map((r) => (
             <button
               key={r.label}
@@ -69,14 +69,14 @@ export function CropDialog({ src, onCancel, onApply }: Props) {
       </div>
       <footer className="flex items-center gap-4 border-t border-line px-4 py-3">
         <label className="flex flex-1 items-center gap-3 text-sm text-muted">
-          {t.crop.zoom}
+          <span className="hidden sm:inline">{t.crop.zoom}</span>
           <input type="range" min={1} max={4} step={0.05} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="flex-1 accent-accent-solid" />
         </label>
-        <button type="button" onClick={onCancel} className="rounded-lg px-4 py-2 text-sm hover:bg-line">{t.crop.cancel}</button>
+        <button type="button" onClick={onCancel} className="whitespace-nowrap rounded-lg px-3 py-2 text-sm hover:bg-line sm:px-4">{t.crop.cancel}</button>
         <button
           type="button"
           onClick={() => area && onApply(area)}
-          className="rounded-lg bg-accent-solid px-4 py-2 text-sm font-semibold text-on-accent hover:brightness-110"
+          className="whitespace-nowrap rounded-lg bg-accent-solid px-3 py-2 text-sm font-semibold text-on-accent hover:brightness-110 sm:px-4"
         >
           {t.crop.apply}
         </button>
