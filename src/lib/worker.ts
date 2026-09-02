@@ -1,5 +1,5 @@
-import { env, pipeline, AutoModel, AutoProcessor, RawImage, SamModel, Tensor, VitMatteForImageMatting, type PreTrainedModel, type Processor } from '@huggingface/transformers'
-import { MATTE_MODEL, SAM_MODEL } from './models'
+import { env, pipeline, AutoModel, AutoProcessor, EdgeTamModel, RawImage, Tensor, VitMatteForImageMatting, type PreTrainedModel, type Processor } from '@huggingface/transformers'
+import { MATTE_MODEL, SAM_MODEL, isGpuLimit } from './models'
 import type { Device, Runtime } from './models'
 
 env.allowLocalModels = false
@@ -13,12 +13,15 @@ export interface Bitmap {
 }
 
 export interface Point { x: number; y: number; label: 0 | 1 }
+export interface Box { x0: number; y0: number; x1: number; y1: number }
 export interface Mask { data: Uint8ClampedArray; width: number; height: number }
+// `count` candidate masks stacked in `data`, one plane of width*height each.
+export interface Masks extends Mask { count: number; best: number }
 
 export type Request =
   | { id: number; type: 'detect' }
   | { id: number; type: 'samEmbed'; image: Bitmap; device: Device }
-  | { id: number; type: 'samMask'; points: Point[] }
+  | { id: number; type: 'samMask'; points: Point[]; box: Box | null }
   | { id: number; type: 'matte'; image: Bitmap; device: Device }
   | { id: number; type: 'load'; task: 'bg' | 'sr'; model: string; revision: string; device: Device; dtype: string }
   | { id: number; type: 'removeBg'; image: Bitmap }
@@ -32,9 +35,9 @@ export type Response =
 
 type Pipe = Awaited<ReturnType<typeof pipeline>>
 type SamState = {
-  model: SamModel
+  model: EdgeTamModel
   processor: Processor
-  embeddings?: { image_embeddings: Tensor; image_positional_embeddings: Tensor }
+  embeddings?: Record<string, Tensor>
   sizes?: { original_sizes: number[][]; reshaped_input_sizes: number[][] }
 }
 let sam: Promise<SamState> | null = null
@@ -166,10 +169,10 @@ async function samEmbed(id: number, image: Bitmap, device: Device) {
   sam ??= (async () => {
     const opts = { revision: SAM_MODEL.revision, device, dtype: device === 'webgpu' ? { vision_encoder: 'fp16', prompt_encoder_mask_decoder: 'fp32' } : 'q8', progress_callback: progressFor(id) }
     const [model, processor] = await Promise.all([
-      SamModel.from_pretrained(SAM_MODEL.id, opts as Parameters<typeof SamModel.from_pretrained>[1]),
+      EdgeTamModel.from_pretrained(SAM_MODEL.id, opts as Parameters<typeof EdgeTamModel.from_pretrained>[1]),
       AutoProcessor.from_pretrained(SAM_MODEL.id, { revision: SAM_MODEL.revision }),
     ])
-    return { model: model as SamModel, processor }
+    return { model: model as EdgeTamModel, processor }
   })()
   sam.catch(() => { sam = null })
   const state = await sam
@@ -180,28 +183,31 @@ async function samEmbed(id: number, image: Bitmap, device: Device) {
   state.sizes = { original_sizes: inputs.original_sizes, reshaped_input_sizes: inputs.reshaped_input_sizes }
 }
 
-async function samMask(points: Point[]): Promise<Mask> {
+async function samMask(points: Point[], box: Box | null): Promise<Masks> {
   const state = await sam!
   const { embeddings, sizes } = state
   if (!embeddings || !sizes) throw new Error('sam: no embeddings')
   const proc = state.processor as unknown as {
-    reshape_input_points(p: number[][][][], o: number[][], r: number[][]): Tensor
+    reshape_input_points(p: number[][][], o: number[][], r: number[][], isBox?: boolean): Tensor
     post_process_masks(m: Tensor, o: number[][], r: number[][]): Promise<Tensor[]>
   }
-  const input_points = proc.reshape_input_points([[points.map((p) => [p.x, p.y])]], sizes.original_sizes, sizes.reshaped_input_sizes)
-  const input_labels = new Tensor('int64', BigInt64Array.from(points.map((p) => BigInt(p.label))), [1, 1, points.length])
-  const out = await state.model({ ...embeddings, input_points, input_labels })
+  const inputs: Record<string, Tensor> = { ...embeddings }
+  if (points.length) {
+    inputs.input_points = proc.reshape_input_points([points.map((p) => [p.x, p.y])], sizes.original_sizes, sizes.reshaped_input_sizes)
+    inputs.input_labels = new Tensor('int64', BigInt64Array.from(points.map((p) => BigInt(p.label))), [1, 1, points.length])
+  }
+  if (box) inputs.input_boxes = proc.reshape_input_points([[[box.x0, box.y0, box.x1, box.y1]]], sizes.original_sizes, sizes.reshaped_input_sizes, true)
+  const out = await state.model(inputs)
   const masks = await proc.post_process_masks(out.pred_masks, sizes.original_sizes, sizes.reshaped_input_sizes)
   const m = masks[0]
-  const [, n, h, w] = m.dims
+  const [, count, h, w] = m.dims
   const scores = out.iou_scores.data as Float32Array
   let best = 0
-  for (let i = 1; i < n; i++) if (scores[i] > scores[best]) best = i
+  for (let i = 1; i < count; i++) if (scores[i] > scores[best]) best = i
   const src = m.data as Uint8Array
-  const data = new Uint8ClampedArray(w * h)
-  const off = best * w * h
-  for (let i = 0; i < w * h; i++) data[i] = src[off + i] ? 255 : 0
-  return { data, width: w, height: h }
+  const data = new Uint8ClampedArray(count * w * h)
+  for (let i = 0; i < data.length; i++) data[i] = src[i] ? 255 : 0
+  return { data, width: w, height: h, count, best }
 }
 
 // Trimap from the current alpha: confident foreground / background stay fixed,
@@ -299,7 +305,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
         post({ id: msg.id, type: 'done', result: null })
         break
       case 'samMask': {
-        const r = await samMask(msg.points)
+        const r = await samMask(msg.points, msg.box)
         post({ id: msg.id, type: 'done', result: r }, [r.data.buffer])
         break
       }
@@ -310,6 +316,21 @@ self.onmessage = async (e: MessageEvent<Request>) => {
       }
     }
   } catch (err) {
+    if (isGpuLimit(err)) evict(msg.type)
     post({ id: msg.id, type: 'error', message: err instanceof Error ? err.message : String(err) })
   }
+}
+
+// A session that blew the GPU limits is useless: drop it so the next call reloads
+// the model on the device the client picks instead.
+function evict(type: Request['type']) {
+  if (type === 'removeBg' || type === 'load') {
+    if (current.bg) cache.delete(current.bg)
+    if (current.sr) cache.delete(current.sr)
+    current.bg = current.sr = null
+  } else if (type === 'upscale') {
+    if (current.sr) cache.delete(current.sr)
+    current.sr = null
+  } else if (type === 'samEmbed' || type === 'samMask') sam = null
+  else if (type === 'matte') matte = null
 }

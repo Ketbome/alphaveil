@@ -40,7 +40,9 @@ Target: `fern-source.webp` → BiRefNet (full) → `fern-cutout.webp`. Aspect 1:
 Botanical studio still life of one delicate fern branch with a few thin translucent leaves, intricate overlapping stems and serrated edges, isolated against a smooth warm charcoal background, controlled side lighting revealing veins and partial translucency, scientifically precise silhouette, high-end editorial macro photography, full branch contained inside frame with clean negative space around it, realistic organic imperfections, no vase
 ```
 
-## 4. Fur
+## 4. Fur and whiskers
+
+Shipped as real photos instead of generated ones: `cat.webp` (close-up, tag `fur`) and `nina.webp` (tag `whiskers`), both cut out with BEN2. Keep the prompt below for regenerating a stand-in.
 
 Target: `dog-source.webp` → BiRefNet Lite → `dog-cutout.webp`. Aspect 1:1.
 
@@ -71,5 +73,5 @@ The specimens are real `<figure>` elements, not a flattened image: a tilted card
 Composition reference only (never ship this as a flattened asset):
 
 ```text
-Desktop interface composition reference for a browser image tool called Alphaveil, 16:9, warm bone paper background with a faint grid, editorial serif headline on the left, one large upload card on the right, four small tilted photo cards floating asymmetrically around the upload card, each showing a cutout on a checkerboard: curly-hair portrait, trail shoe, fern, terrier; burnt-sienna accent only, thin crop marks and tiny monospace captions, soft diffuse shadows, no glassmorphism, no gradients, no neon, no purple, generous negative space, premium creative-tool aesthetic
+Desktop interface composition reference for a browser image tool called Alphaveil, 16:9, warm bone paper background with a faint grid, editorial serif headline on the left, one large upload card on the right, four small tilted photo cards floating asymmetrically around the upload card, each showing a cutout on a checkerboard: curly-hair portrait, trail shoe, fern, cat; burnt-sienna accent only, thin crop marks and tiny monospace captions, soft diffuse shadows, no glassmorphism, no gradients, no neon, no purple, generous negative space, premium creative-tool aesthetic
 ```

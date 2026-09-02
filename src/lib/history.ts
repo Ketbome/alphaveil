@@ -5,21 +5,17 @@ export type StepKind = 'source' | 'crop' | 'trim' | 'bg' | 'upscale' | 'compose'
 export interface Step {
   bitmap: Bitmap
   kind: StepKind
+  // The original photo carried through the same crops, trims and upscales as
+  // `bitmap`, so the comparison always lines up with what the user started from.
+  origin: Bitmap
 }
 
-// Crops and trims change the framing, so a comparison against anything earlier
-// would misalign. The "before" is the latest framing step that precedes the
-// current result; if the current step is itself a framing step there is nothing
-// meaningful to compare.
+// Always the original photo, framed like the current step. While nothing but
+// framing has happened the two are the same bitmap and there is nothing to show.
 export function compareBase(history: Step[]): Bitmap | null {
-  if (history.length < 2) return null
-  const last = history[history.length - 1]
-  if (last.kind === 'crop' || last.kind === 'trim' || last.kind === 'source') return null
-  for (let i = history.length - 2; i >= 0; i--) {
-    const k = history[i].kind
-    if (k === 'source' || k === 'crop' || k === 'trim') return history[i].bitmap
-  }
-  return history[0].bitmap
+  const last = history.at(-1)
+  if (!last || last.origin === last.bitmap) return null
+  return last.origin
 }
 
 // The most recent step that still had the original photo behind the subject:

@@ -4,9 +4,9 @@ import {
 } from 'lucide-react'
 import type { Area } from 'react-easy-crop'
 import { engine, type Progress } from './lib/engine'
-import type { Bitmap, Point, Status } from './lib/worker'
-import { BG_MODELS, NO_RUNTIME, SR_MODELS, SR_SCALE, modelAvailable, modelDevice, modelDtype, type ModelSpec, type Runtime } from './lib/models'
-import { composeBackdrop, cropBitmap, download, exportBlob, fileToBitmap, formatBytes, inspectAlpha, smartCrop, toDataUrl, toThumbnailDataUrl, trimTransparent } from './lib/image'
+import type { Bitmap, Box, Point, Status } from './lib/worker'
+import { BG_MODELS, MATTE_MODEL, NO_RUNTIME, SAM_MODEL, SR_MODELS, SR_SCALE, helperDevice, isGpuLimit, modelAvailable, modelDevice, modelDtype, type ModelSpec, type Runtime, type Tier } from './lib/models'
+import { composeBackdrop, cropBitmap, download, exportBlob, fileToBitmap, formatBytes, inspectAlpha, resizeBitmap, smartCrop, toDataUrl, toThumbnailDataUrl } from './lib/image'
 import { zipSync } from 'fflate'
 import { useTheme, type Theme } from './lib/theme'
 import { compareBase, lastOpaque, type Step, type StepKind } from './lib/history'
@@ -42,24 +42,33 @@ const stored = (key: string, fallback: string) => {
   try { return localStorage.getItem(key) ?? fallback } catch { return fallback }
 }
 
-const storedModel = (key: string, models: ModelSpec[], fallback: ModelSpec) => {
-  const value = stored(key, fallback.id)
-  return models.some((model) => model.id === value) ? value : fallback.id
+const storedModel = (key: string, models: ModelSpec[], fallback: string) => {
+  const value = stored(key, fallback)
+  return models.some((model) => model.id === value) ? value : fallback
+}
+
+// No saved preference: start on the finest cutout this machine can actually run.
+const TIERS: Tier[] = ['max', 'best', 'balanced', 'fast']
+const bestAvailable = (runtime: Runtime) =>
+  TIERS.map((tier) => BG_MODELS.find((m) => m.tier === tier && modelAvailable(m, runtime))).find(Boolean) ?? BG_MODELS[0]
+
+const blockedModels = () => {
+  try { return JSON.parse(localStorage.getItem('gpuBlocked') ?? '[]') as string[] } catch { return [] }
 }
 
 export default function App() {
   const { t, lang, setLang } = useI18n()
   const { theme, setTheme } = useTheme()
   const [runtime, setRuntime] = useState<Runtime | null>(null)
-  const [bgModel, setBgModel] = useState(() => storedModel('bgModel', BG_MODELS, BG_MODELS[0]))
-  const [srModel, setSrModel] = useState(() => storedModel('srModel', SR_MODELS, SR_MODELS[0]))
+  const [bgModel, setBgModel] = useState(() => storedModel('bgModel', BG_MODELS, ''))
+  const [srModel, setSrModel] = useState(() => storedModel('srModel', SR_MODELS, SR_MODELS[0].id))
   const [items, setItems] = useState<Item[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [progress, setProgress] = useState<Progress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cropSrc, setCropSrc] = useState<string | null>(null)
-  const [compare, setCompare] = useState(false)
+  const [compare, setCompare] = useState(true)
   const [retouching, setRetouching] = useState<RetouchMode | null>(null)
   const [tipSeen, setTipSeen] = useState(() => stored('tipSeen', '') === '1')
   const [preview, setPreview] = useState<string>('checker')
@@ -75,13 +84,13 @@ export default function App() {
   const blurSource = active ? lastOpaque(active.history, (b) => !inspectAlpha(b).transparent) : null
   const install = useInstallPrompt()
   const canCompare = !!before
-  const { transparent, trimmable, opaqueFraction } = useMemo(() => {
-    if (!current) return { transparent: false, trimmable: false, opaqueFraction: 0 }
+  const { transparent, trimmable, opaqueFraction, bounds } = useMemo(() => {
+    if (!current) return { transparent: false, trimmable: false, opaqueFraction: 0, bounds: null }
     let n = 0
     for (let i = 3; i < current.data.length; i += 4) if (current.data[i] > 127) n++
     return { ...inspectAlpha(current), opaqueFraction: n / (current.width * current.height) }
   }, [current])
-  const requestedBg = BG_MODELS.find((model) => model.id === bgModel) ?? BG_MODELS[0]
+  const requestedBg = BG_MODELS.find((model) => model.id === bgModel) ?? (runtime ? bestAvailable(runtime) : BG_MODELS[0])
   const selectedBg = runtime && !modelAvailable(requestedBg, runtime)
     ? BG_MODELS.find((model) => modelAvailable(model, runtime)) ?? BG_MODELS[0]
     : requestedBg
@@ -90,15 +99,47 @@ export default function App() {
   const bgDevice = runtime ? modelDevice(selectedBg, runtime) : undefined
 
   useEffect(() => {
-    engine.detectDevice().then(setRuntime).catch(() => setRuntime(NO_RUNTIME))
+    engine.detectDevice().then((r) => setRuntime({ ...r, blocked: blockedModels() })).catch(() => setRuntime(NO_RUNTIME))
   }, [])
-  useEffect(() => { try { localStorage.setItem('bgModel', selectedBg.id) } catch { /* private mode */ } }, [selectedBg.id])
   useEffect(() => { try { localStorage.setItem('srModel', srModel) } catch { /* private mode */ } }, [srModel])
 
-  const pushTo = (id: string | null, b: Bitmap, kind: StepKind) => {
-    setItems((list) => list.map((i) => (i.id !== id ? i : { ...i, history: [...i.history, { bitmap: b, kind }].slice(-MAX_HISTORY), thumbnail: toThumbnailDataUrl(b) })))
+  const chooseBg = (id: string) => {
+    setBgModel(id)
+    try { localStorage.setItem('bgModel', id) } catch { /* private mode */ }
   }
-  const push = (b: Bitmap, kind: StepKind) => pushTo(activeId, b, kind)
+
+  // Some GPUs expose fewer storage buffers than a model's shaders need. The limit
+  // only shows up when the model runs, so move that model to WASM and try once more.
+  const onGpuLimit = async <T,>(id: string, fn: (rt: Runtime) => Promise<T>) => {
+    const rt = runtime ?? NO_RUNTIME
+    try {
+      return await fn(rt)
+    } catch (e) {
+      if (!isGpuLimit(e) || rt.blocked?.includes(id)) throw e
+      const blocked = [...(rt.blocked ?? []), id]
+      try { localStorage.setItem('gpuBlocked', JSON.stringify(blocked)) } catch { /* private mode */ }
+      setRuntime({ ...rt, blocked })
+      return await fn({ ...rt, blocked })
+    }
+  }
+
+  const pushTo = (id: string | null, b: Bitmap, kind: StepKind, origin?: Bitmap) => {
+    setItems((list) => list.map((i) => {
+      if (i.id !== id) return i
+      const step: Step = { bitmap: b, kind, origin: origin ?? i.history.at(-1)!.origin }
+      return { ...i, history: [...i.history, step].slice(-MAX_HISTORY), thumbnail: toThumbnailDataUrl(b) }
+    }))
+  }
+  const push = (b: Bitmap, kind: StepKind, origin?: Bitmap) => pushTo(activeId, b, kind, origin)
+
+  // Crops and trims reframe the tracked original the same way, so the comparison
+  // stays aligned. Until something is actually done to the photo the two match,
+  // and there is nothing to compare.
+  const reframe = (kind: 'crop' | 'trim', x: number, y: number, w: number, h: number) => {
+    const prev = active!.history.at(-1)!
+    const b = cropBitmap(prev.bitmap, x, y, w, h)
+    push(b, kind, prev.bitmap === prev.origin ? b : cropBitmap(prev.origin, x, y, w, h))
+  }
   const undo = () => {
     setItems((list) => list.map((i) => {
       if (i.id !== activeId || i.history.length < 2) return i
@@ -116,11 +157,12 @@ export default function App() {
 
   const onStatus = (s: Status) => setBusy(s.key === 'segmenting' ? t.busy.segmenting : s.key === 'matting' ? t.busy.matting : t.busy.upscaling(s.done, s.total))
 
-  const run = async (kind: StepKind, fn: () => Promise<Bitmap>) => {
+  const run = async (kind: StepKind, fn: () => Promise<Bitmap>, origin?: (result: Bitmap) => Bitmap) => {
     setBusy(t.busy.loading)
     setError(null)
     try {
-      push(await fn(), kind)
+      const out = await fn()
+      push(out, kind, origin?.(out))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -138,7 +180,7 @@ export default function App() {
     for (const file of images.slice(0, Math.max(0, room))) {
       try {
         const bmp = await fileToBitmap(file)
-        added.push({ id: crypto.randomUUID(), name: file.name.replace(/\.[^.]+$/, ''), history: [{ bitmap: bmp, kind: 'source' }], thumbnail: toThumbnailDataUrl(bmp) })
+        added.push({ id: crypto.randomUUID(), name: file.name.replace(/\.[^.]+$/, ''), history: [{ bitmap: bmp, kind: 'source', origin: bmp }], thumbnail: toThumbnailDataUrl(bmp) })
       } catch {
         setError(t.errors.unsupported(file.name))
       }
@@ -157,9 +199,10 @@ export default function App() {
     return () => window.removeEventListener('paste', onPaste)
   })
 
-  const loadBg = async (spec: ModelSpec = selectedBg) => {
-    const dtype = modelDtype(spec, runtime!)
-    const device = modelDevice(spec, runtime!)
+  const loadBg = async (rt: Runtime, spec: ModelSpec = selectedBg) => {
+    if (!modelAvailable(spec, rt)) throw new Error(t.errors.gpuLimit(spec.name))
+    const dtype = modelDtype(spec, rt)
+    const device = modelDevice(spec, rt)
     setBusy(t.busy.preparing(spec.name, device.toUpperCase(), dtype.toUpperCase()))
     await engine.load('bg', spec.id, spec.revision, device, dtype, setProgress)
     setProgress(null)
@@ -169,36 +212,41 @@ export default function App() {
     const spec = BG_MODELS.find((m) => m.id === id)
     const base = active?.history.at(-2)?.bitmap
     if (!spec || !base) return
-    setBgModel(id)
+    chooseBg(id)
     undo()
-    void run('bg', async () => {
-      await loadBg(spec)
+    void run('bg', () => onGpuLimit(spec.id, async (rt) => {
+      await loadBg(rt, spec)
       return engine.removeBg(base, onStatus)
-    })
+    }))
   }
 
-  const removeBg = () => run('bg', async () => {
-    await loadBg()
+  const removeBg = () => run('bg', () => onGpuLimit(selectedBg.id, async (rt) => {
+    await loadBg(rt)
     return engine.removeBg(current!, onStatus)
-  })
+  }))
 
   const detectInArea = async (crop: Bitmap) => {
     try {
-      await loadBg()
-      return await engine.removeBg(crop, () => {})
+      return await onGpuLimit(selectedBg.id, async (rt) => {
+        await loadBg(rt)
+        return engine.removeBg(crop, () => {})
+      })
     } finally {
       setBusy(null)
       setProgress(null)
     }
   }
 
-  const helperDevice = () => (runtime?.device ?? 'wasm')
   const samEmbed = async (image: Bitmap) => {
-    try { await engine.samEmbed(image, helperDevice(), setProgress, () => {}) } finally { setProgress(null) }
+    try {
+      await onGpuLimit(SAM_MODEL.id, (rt) => engine.samEmbed(image, helperDevice(SAM_MODEL.id, rt), setProgress, () => {}))
+    } finally { setProgress(null) }
   }
-  const samMask = (points: Point[]) => engine.samMask(points)
+  const samMask = (points: Point[], box: Box | null) => engine.samMask(points, box)
   const matte = async (image: Bitmap) => {
-    try { return await engine.matte(image, helperDevice(), setProgress, () => {}) } finally { setProgress(null) }
+    try {
+      return await onGpuLimit(MATTE_MODEL.id, (rt) => engine.matte(image, helperDevice(MATTE_MODEL.id, rt), setProgress, () => {}))
+    } finally { setProgress(null) }
   }
 
   const pendingBg = items.filter((i) => !inspectAlpha(i.history.at(-1)!.bitmap).transparent)
@@ -206,13 +254,15 @@ export default function App() {
     setError(null)
     setBusy(t.busy.loading)
     try {
-      await loadBg()
-      for (const [n, item] of pendingBg.entries()) {
-        setActiveId(item.id)
-        setBusy(t.batch.progress(n + 1, pendingBg.length))
-        const out = await engine.removeBg(item.history.at(-1)!.bitmap, () => {})
-        pushTo(item.id, out, 'bg')
-      }
+      await onGpuLimit(selectedBg.id, async (rt) => {
+        await loadBg(rt)
+        for (const [n, item] of pendingBg.entries()) {
+          setActiveId(item.id)
+          setBusy(t.batch.progress(n + 1, pendingBg.length))
+          const out = await engine.removeBg(item.history.at(-1)!.bitmap, () => {})
+          pushTo(item.id, out, 'bg')
+        }
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -243,25 +293,25 @@ export default function App() {
 
   const frameTo = (aspect: number | null) => {
     const r = smartCrop(current!, aspect)
-    if (r) push(cropBitmap(current!, r.x, r.y, r.width, r.height), 'crop')
+    if (r) reframe('crop', r.x, r.y, r.width, r.height)
   }
 
   const applyBackdrop = () => {
     push(composeBackdrop(current!, { ...backdrop, source: blurSource }), 'compose')
   }
 
-  const upscale = () => run('upscale', async () => {
-    const dtype = modelDtype(selectedSr, runtime!)
-    const device = modelDevice(selectedSr, runtime!)
+  const upscale = () => run('upscale', () => onGpuLimit(selectedSr.id, async (rt) => {
+    const dtype = modelDtype(selectedSr, rt)
+    const device = modelDevice(selectedSr, rt)
     setBusy(t.busy.preparing(selectedSr.name, device.toUpperCase(), dtype.toUpperCase()))
     await engine.load('sr', selectedSr.id, selectedSr.revision, device, dtype, setProgress)
     setProgress(null)
     return engine.upscale(current!, SR_SCALE[selectedSr.id], onStatus)
-  })
+  }), (out) => resizeBitmap(active!.history.at(-1)!.origin, out.width, out.height))
 
   const applyCrop = (a: Area) => {
     setCropSrc(null)
-    push(cropBitmap(current!, Math.round(a.x), Math.round(a.y), Math.round(a.width), Math.round(a.height)), 'crop')
+    reframe('crop', Math.round(a.x), Math.round(a.y), Math.round(a.width), Math.round(a.height))
   }
 
   const save = async () => {
@@ -291,7 +341,7 @@ export default function App() {
     suggestions.push({ id: 'pick-object', label: t.quality.pickObject, detail: t.quality.pickObjectDetail, icon: <MousePointerClick className="size-3.5" />, onClick: () => setRetouching('select') })
   }
   if (current && trimmable) {
-    suggestions.push({ id: 'trim', label: t.tool.trim, detail: t.tool.trimDetail, icon: <Scissors className="size-3.5" />, onClick: () => push(trimTransparent(current), 'trim') })
+    suggestions.push({ id: 'trim', label: t.tool.trim, detail: t.tool.trimDetail, icon: <Scissors className="size-3.5" />, onClick: () => bounds && reframe('trim', bounds.x, bounds.y, bounds.width, bounds.height) })
   }
 
   const exportMenu = (
@@ -403,7 +453,7 @@ export default function App() {
             <Tooltip label={t.models.open}><button type="button" className="rounded-md p-1.5 hover:bg-line" aria-label={t.models.open}><Settings2 className="size-5" /></button></Tooltip>
           )}>
             <div className="flex w-[min(22rem,calc(100vw-3.5rem))] min-w-0 flex-col gap-4">
-              <ModelPicker title={t.models.bg} models={BG_MODELS} value={selectedBg.id} runtime={runtime ?? NO_RUNTIME} onChange={setBgModel} />
+              <ModelPicker title={t.models.bg} models={BG_MODELS} value={selectedBg.id} runtime={runtime ?? NO_RUNTIME} onChange={chooseBg} />
               <ModelPicker title={t.models.sr} models={SR_MODELS} value={srModel} runtime={runtime ?? NO_RUNTIME} onChange={setSrModel} />
               <p className="px-1 text-[11px] leading-snug text-dim">{t.models.note}</p>
             </div>
@@ -436,7 +486,7 @@ export default function App() {
                   </div>
                   <div className="flex items-center justify-between gap-4 py-3">
                     <span className="text-muted">{t.quality.label}</span>
-                    <QualityChip value={selectedBg} runtime={runtime ?? NO_RUNTIME} onChange={setBgModel} compact />
+                    <QualityChip value={selectedBg} runtime={runtime ?? NO_RUNTIME} onChange={chooseBg} compact />
                   </div>
                 </div>
               </section>
@@ -449,14 +499,12 @@ export default function App() {
           </div>
         ) : (
           <>
-            <ImageQueue items={items.map((i) => ({ id: i.id, name: i.name, thumbnail: i.thumbnail, steps: i.history.length }))} activeId={activeId} disabled={!!busy} max={MAX_IMAGES} onSelect={setActiveId} onRemove={remove} onFiles={addFiles} pendingBg={pendingBg.length} onRemoveAllBg={removeBgAll} onZip={downloadAll} />
-
             <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-2 sm:px-3" role="toolbar" aria-label={t.appName}>
               <Tool label={t.tool.cropHint} onClick={() => setCropSrc(toDataUrl(current!))} disabled={disabled} icon={<Crop className="size-4" />} text={t.tool.crop} />
               <Tool label={t.tool.removeBgHint(selectedBg.name)} onClick={removeBg} disabled={disabled} icon={<Eraser className="size-4" />} text={t.tool.removeBg} primary />
-              <QualityChip value={selectedBg} runtime={runtime ?? NO_RUNTIME} onChange={setBgModel} compact />
+              <QualityChip value={selectedBg} runtime={runtime ?? NO_RUNTIME} onChange={chooseBg} compact />
               <Tool label={t.tool.upscaleHint(scale, selectedSr.name)} onClick={upscale} disabled={disabled} icon={<Sparkles className="size-4" />} text={t.tool.upscale(scale)} />
-              <Tool label={t.tool.trimHint} onClick={() => push(trimTransparent(current!), 'trim')} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
+              <Tool label={t.tool.trimHint} onClick={() => bounds && reframe('trim', bounds.x, bounds.y, bounds.width, bounds.height)} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
               <Tool label={t.retouch.hint} onClick={() => setRetouching('erase')} disabled={disabled} icon={<Paintbrush className="size-4" />} text={t.retouch.title} />
               <Popover placement="bottom-start" trigger={({ open }) => (
                 <Tooltip label={transparent ? t.frame.hint : t.frame.needsAlpha} placement="bottom">
@@ -530,14 +578,7 @@ export default function App() {
 
             <div className={`relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 [container-type:size] ${preview === 'checker' ? 'checker' : ''}`} style={preview === 'checker' ? undefined : { background: preview }}>
               {current && (compare && before ? <CompareView key={active.id + active.history.length} before={before} after={current} /> : <PreviewCanvas key={active.id + active.history.length} bitmap={current} label={t.preview(active.name)} />)}
-              {!busy && items.length < MAX_IMAGES && (
-                <Tooltip label={t.queue.addHint} placement="top">
-                  <button type="button" onClick={() => addInput.current?.click()} aria-label={t.queue.addHint}
-                    className="absolute bottom-5 left-1/2 hidden size-12 -translate-x-1/2 place-items-center rounded-full bg-accent-solid text-on-accent shadow-lg shadow-black/25 transition hover:scale-105 active:scale-95 md:grid">
-                    <Plus className="size-6" />
-                  </button>
-                </Tooltip>
-              )}
+              <ImageQueue items={items.map((i) => ({ id: i.id, name: i.name, thumbnail: i.thumbnail, steps: i.history.length }))} activeId={activeId} disabled={!!busy} max={MAX_IMAGES} onSelect={setActiveId} onRemove={remove} onFiles={addFiles} pendingBg={pendingBg.length} onRemoveAllBg={removeBgAll} onZip={downloadAll} />
               <input ref={addInput} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) addFiles(Array.from(e.target.files)); e.target.value = '' }} />
               {busy && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/70 backdrop-blur-sm" role="status" aria-live="polite">

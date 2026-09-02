@@ -21,6 +21,7 @@ export function ModelPicker({ title, models, value, runtime, onChange }: Props) 
           const dtype = modelDtype(m, runtime)
           const device = modelDevice(m, runtime)
           const fallback = runtime.device === 'webgpu' && device === 'wasm'
+          const blocked = runtime.blocked?.includes(m.id) ?? false
           const available = modelAvailable(m, runtime)
           const copy = t.models.entries[m.id]
           return (
@@ -44,7 +45,7 @@ export function ModelPicker({ title, models, value, runtime, onChange }: Props) 
                   <div className="mt-1 flex items-center gap-2 text-[10px] text-dim">
                     <span>{t.models.licenses[m.license] ?? m.license}</span><span>·</span><span className={fallback ? 'text-warn' : ''}>{device.toUpperCase()}</span>
                   </div>
-                  {fallback ? <div className="mt-1.5 text-[10px] leading-snug text-warn/80">{t.models.fallback(runtime.maxStorageBuffersPerShaderStage, m.minStorageBuffers ?? 0)} {available ? t.models.useCpu : t.models.noCpu}</div> : null}
+                  {fallback ? <div className="mt-1.5 text-[10px] leading-snug text-warn/80">{blocked ? t.models.blocked : t.models.fallback(runtime.maxStorageBuffersPerShaderStage, m.minStorageBuffers ?? 0)} {available ? t.models.useCpu : t.models.noCpu}</div> : null}
                   {copy?.warning ? <div className="mt-1.5 text-[10px] leading-snug text-warn/80">{copy.warning}</div> : null}
                 </div>
               </button>

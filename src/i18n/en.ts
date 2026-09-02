@@ -88,7 +88,8 @@ export const en = {
     smart: 'Similar colors only',
     tolerance: 'Tolerance',
     select: 'Click object',
-    selectHint: 'Click the object you want. Add more clicks to grow the selection; use Exclude for parts to leave out.',
+    selectHint: 'Click the object you want, or drag a box around it. Add more clicks to grow the selection; use Exclude for parts to leave out.',
+    shape: 'Shape',
     analyzing: 'Analyzing the image…',
     pointType: 'Point type',
     include: '+ Include',
@@ -120,7 +121,7 @@ export const en = {
   showcase: {
     label: 'Results made with Alphaveil',
     alt: (model: string) => `Cutout produced locally with ${model}`,
-    tags: { hair: 'hair', mesh: 'mesh', fineEdges: 'fine edges', fur: 'fur', upscaled: '×4 upscaled' } as Record<string, string>,
+    tags: { hair: 'hair', mesh: 'mesh', fineEdges: 'fine edges', fur: 'fur', whiskers: 'whiskers', upscaled: '×4 upscaled' } as Record<string, string>,
   },
   compare: { toggle: 'Compare', before: 'Before', after: 'After', hint: 'Drag the divider to compare before and after' },
   exportOpts: {
@@ -148,11 +149,13 @@ export const en = {
     fallback: (have: number, need: number) => `Your GPU allows ${have} buffers per shader; this model needs ${need}.`,
     useCpu: 'CPU will be used.',
     noCpu: 'Not enabled on CPU because of its memory usage.',
+    blocked: 'This GPU ran out of shader buffers with this model.',
     entries: {
       'Xenova/modnet': { profile: 'Compatible · fast', hint: 'Optimized for people, hair and video calls.' },
       'briaai/RMBG-1.4': { profile: 'General · non-commercial', hint: 'Good balance for products, people and objects.', warning: 'The weights allow non-commercial use only.' },
       'onnx-community/BiRefNet_lite-ONNX': { profile: 'General · recommended', hint: 'Good balance for products, people and fine edges.' },
       'onnx-community/BiRefNet-ONNX': { profile: 'Maximum quality', hint: 'Best quality. Heavy: needs a GPU with enough memory.', warning: 'May exceed the memory available on integrated GPUs.' },
+      'onnx-community/BEN2-ONNX': { profile: 'Maximum quality', hint: 'The finest edges on hair, fur and plants. Big download and needs a capable GPU.' },
       'Xenova/swin2SR-lightweight-x2-64': { profile: 'Fast · ×2', hint: 'Doubles the resolution. Very fast.' },
       'onnx-community/swin2SR-realworld-sr-x4-64-bsrgan-psnr-ONNX': { profile: 'Restoration · ×4', hint: 'Quadruples the resolution and cleans JPEG compression.' },
     } as Record<string, { profile: string; hint: string; warning?: string }>,
@@ -189,6 +192,7 @@ export const en = {
     export: 'Could not export the image',
     tooMany: (max: number) => `Only ${max} images can be open at once; the extra files were skipped.`,
     unsupported: (name: string) => `${name} is not a supported image.`,
+    gpuLimit: (name: string) => `${name} needs more from this GPU than it offers, and it is too heavy for the CPU. Pick another quality.`,
   },
   seo: {
     title: 'Alphaveil · Remove image backgrounds with AI in your browser',

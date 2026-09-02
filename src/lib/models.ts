@@ -5,6 +5,8 @@ export interface Runtime {
   device: Device
   supportsFp16: boolean
   maxStorageBuffersPerShaderStage: number
+  // Models that blew the GPU limits at runtime on this machine; kept in localStorage.
+  blocked?: string[]
 }
 
 export type Tier = 'fast' | 'balanced' | 'best' | 'max'
@@ -46,11 +48,20 @@ export const BG_MODELS: ModelSpec[] = [
     id: 'onnx-community/BiRefNet-ONNX',
     revision: '534d3c82d3bb8b2f0867db6dfbc3a525b8e42f67',
     name: 'BiRefNet',
-    tier: 'max',
     license: 'MIT',
     size: { fp16: '490 MB', fp32: '973 MB' },
     dtype: { webgpu: 'fp16', wasm: 'fp32' },
     minStorageBuffers: 11,
+    wasmSafe: false,
+  },
+  {
+    id: 'onnx-community/BEN2-ONNX',
+    revision: 'c552aa82688edce09f0ac9d2e31ad53d9d629010',
+    name: 'BEN2',
+    tier: 'max',
+    license: 'MIT',
+    size: { fp16: '219 MB' },
+    dtype: { webgpu: 'fp16', wasm: 'fp16' },
     wasmSafe: false,
   },
   {
@@ -91,12 +102,25 @@ export const SR_SCALE: Record<string, number> = {
 export const NO_RUNTIME: Runtime = { device: 'wasm', supportsFp16: false, maxStorageBuffersPerShaderStage: 0 }
 
 export function modelDevice(model: ModelSpec, runtime: Runtime): Device {
-  if (runtime.device === 'webgpu' && model.minStorageBuffers && runtime.maxStorageBuffersPerShaderStage < model.minStorageBuffers) return 'wasm'
-  return runtime.device
+  if (runtime.device !== 'webgpu') return runtime.device
+  if (runtime.blocked?.includes(model.id)) return 'wasm'
+  if (model.minStorageBuffers && runtime.maxStorageBuffersPerShaderStage < model.minStorageBuffers) return 'wasm'
+  return 'webgpu'
 }
 
 export function modelAvailable(model: ModelSpec, runtime: Runtime) {
-  return modelDevice(model, runtime) !== 'wasm' || model.wasmSafe !== false
+  if (modelDevice(model, runtime) === 'wasm' && model.wasmSafe === false) return false
+  return modelDtype(model, runtime) in model.size
+}
+
+export function helperDevice(id: string, runtime: Runtime | null): Device {
+  return runtime?.device === 'webgpu' && !runtime.blocked?.includes(id) ? 'webgpu' : 'wasm'
+}
+
+// onnxruntime-web aborts with this when a shader needs more storage buffers than
+// the adapter exposes; the limit is fixed per GPU, so the model has to move to WASM.
+export function isGpuLimit(error: unknown) {
+  return /storage buffers|maxStorageBuffers/i.test(error instanceof Error ? error.message : String(error))
 }
 
 export function modelDtype(model: ModelSpec, runtime: Runtime): DType {
@@ -110,5 +134,5 @@ export function modelSize(model: ModelSpec, runtime: Runtime) {
 }
 
 // Fixed helper models (not user-selectable): click-to-select and edge matting.
-export const SAM_MODEL = { id: 'Xenova/slimsam-77-uniform', revision: '5850ab45f587c112167512ffef949107115e26a0', name: 'SlimSAM', size: '21 MB' }
+export const SAM_MODEL = { id: 'onnx-community/EdgeTAM-ONNX', revision: '9c77c7bff7fd0f3079585fa17af7f730ddc531ed', name: 'EdgeTAM', size: '31 MB' }
 export const MATTE_MODEL = { id: 'Xenova/vitmatte-small-composition-1k', revision: '6bc1297f6140f055a227b6d2cfe8c093281f35d2', name: 'ViTMatte', size: '104 MB (28 MB on CPU)' }

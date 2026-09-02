@@ -4,7 +4,7 @@ import { useI18n } from '../i18n'
 interface Specimen {
   src: string
   model: string
-  tag: 'hair' | 'mesh' | 'fineEdges' | 'fur' | 'upscaled'
+  tag: 'hair' | 'mesh' | 'fineEdges' | 'fur' | 'whiskers' | 'upscaled'
   className: string
   tilt: number
   depth: number
@@ -16,7 +16,8 @@ const base = import.meta.env.BASE_URL
 const SPECIMENS: Specimen[] = [
   { src: `${base}showcase/portrait.webp`, model: 'BiRefNet Lite', tag: 'hair', className: 'w-28 lg:w-36 lg:-left-14 lg:-top-16', tilt: -7, depth: 1.2, delay: 0 },
   { src: `${base}showcase/camera.webp`, model: 'Swin2SR', tag: 'upscaled', className: 'w-28 lg:w-32 lg:-right-16 lg:-top-14', tilt: 5, depth: 0.7, delay: 1.1 },
-  { src: `${base}showcase/dog.webp`, model: 'BiRefNet Lite', tag: 'fur', className: 'w-24 lg:w-28 lg:-left-12 lg:-bottom-6', tilt: 4, depth: 0.9, delay: 2.3 },
+  { src: `${base}showcase/cat.webp`, model: 'BEN2', tag: 'fur', className: 'w-24 lg:w-28 lg:-left-12 lg:-bottom-6', tilt: 4, depth: 0.9, delay: 2.3 },
+  { src: `${base}showcase/nina.webp`, model: 'BEN2', tag: 'whiskers', className: 'w-24 lg:w-24 lg:-left-28 lg:top-[36%]', tilt: -3, depth: 1.1, delay: 3.1 },
   { src: `${base}showcase/fern.webp`, model: 'BiRefNet', tag: 'fineEdges', className: 'w-32 lg:w-40 lg:-right-20 lg:-bottom-20', tilt: -4, depth: 1.4, delay: 0.6 },
   { src: `${base}showcase/shoe.webp`, model: 'MODNet', tag: 'mesh', className: 'w-32 lg:w-36 lg:bottom-[-5.5rem] lg:left-[38%]', tilt: 2, depth: 0.5, delay: 1.7 },
 ]
@@ -48,7 +49,7 @@ export function Showcase() {
     <div ref={root} className="pointer-events-none flex w-full max-w-full gap-3 overflow-x-auto px-1 pb-2 pt-4 lg:contents" aria-label={t.showcase.label} role="group">
       {SPECIMENS.map((s, i) => (
         <figure
-          key={s.tag}
+          key={s.src}
           className={`specimen shrink-0 lg:absolute ${s.className}`}
           style={{ ['--tilt' as string]: `${s.tilt}deg`, ['--depth' as string]: s.depth, animationDelay: `${s.delay}s` } as React.CSSProperties}
         >

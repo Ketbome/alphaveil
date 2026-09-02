@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Eraser, Loader2, MousePointerClick, Paintbrush, Sparkles, Undo2, WandSparkles, X } from 'lucide-react'
-import type { Bitmap, Mask, Point } from '../lib/worker'
+import type { Bitmap, Box, Mask, Masks, Point } from '../lib/worker'
 import { toCanvas } from '../lib/image'
 import { useI18n } from '../i18n'
 
@@ -11,7 +11,7 @@ interface Props {
   onApply: (result: Bitmap) => void
   onDetect: (crop: Bitmap) => Promise<Bitmap>
   onSamEmbed: (image: Bitmap) => Promise<void>
-  onSamMask: (points: Point[]) => Promise<Mask>
+  onSamMask: (points: Point[], box: Box | null) => Promise<Masks>
   onMatte: (image: Bitmap) => Promise<Mask>
   initialMode?: Mode
 }
@@ -31,7 +31,11 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
   const [mode, setMode] = useState<Mode>(initialMode ?? (opaque ? 'select' : 'erase'))
   const [points, setPoints] = useState<Point[]>([])
   const [positive, setPositive] = useState(true)
-  const [mask, setMask] = useState<Mask | null>(null)
+  const [box, setBox] = useState<Box | null>(null)
+  const [drag, setDrag] = useState<Box | null>(null)
+  const dragFrom = useRef<{ x: number; y: number; clientX: number; clientY: number } | null>(null)
+  const [masks, setMasks] = useState<Masks | null>(null)
+  const [variant, setVariant] = useState(0)
   const [embedding, setEmbedding] = useState<'idle' | 'loading' | 'ready'>('idle')
   const [refining, setRefining] = useState(false)
   const embedded = useRef(false)
@@ -74,15 +78,17 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     const rc = overlay.getContext('2d', { willReadFrequently: true })!
     if (mode !== 'select') return
     rc.clearRect(0, 0, bitmap.width, bitmap.height)
-    if (!mask) return
+    if (!masks) return
+    const plane = masks.width * masks.height
+    const off = Math.min(variant, masks.count - 1) * plane
     const img = rc.createImageData(bitmap.width, bitmap.height)
-    for (let i = 0; i < mask.data.length; i++) {
-      if (!mask.data[i]) continue
+    for (let i = 0; i < plane; i++) {
+      if (!masks.data[off + i]) continue
       const o = i * 4
       img.data[o] = 223; img.data[o + 1] = 122; img.data[o + 2] = 68; img.data[o + 3] = 255
     }
     rc.putImageData(img, 0, 0)
-  }, [mask, mode, bitmap])
+  }, [masks, variant, mode, bitmap])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
@@ -170,12 +176,27 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     last.current = p
   }
 
-  const addPoint = async (e: ReactPointerEvent) => {
-    if (embedding !== 'ready') return
+  const prompt = async (nextPoints: Point[], nextBox: Box | null) => {
+    setPoints(nextPoints)
+    setBox(nextBox)
+    if (!nextPoints.length && !nextBox) { setMasks(null); return }
+    const m = await onSamMask(nextPoints, nextBox)
+    setMasks(m)
+    setVariant(m.best)
+  }
+
+  const addPoint = (e: ReactPointerEvent) => {
     const p = toImage(e)
-    const next = [...points, { x: Math.round(p.x), y: Math.round(p.y), label: (e.altKey ? !positive : positive) ? 1 : 0 } as Point]
-    setPoints(next)
-    setMask(await onSamMask(next))
+    return prompt([...points, { x: Math.round(p.x), y: Math.round(p.y), label: (e.altKey ? !positive : positive) ? 1 : 0 } as Point], box)
+  }
+
+  const clearPrompt = () => { setPoints([]); setBox(null); setMasks(null) }
+
+  const selected = (): Mask | null => {
+    if (!masks) return null
+    const plane = masks.width * masks.height
+    const off = Math.min(variant, masks.count - 1) * plane
+    return { data: masks.data.subarray(off, off + plane), width: masks.width, height: masks.height }
   }
 
   const feathered = (m: Mask) => {
@@ -199,6 +220,7 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
   }
 
   const applyMask = (keep: boolean) => {
+    const mask = selected()
     if (!mask) return
     const ctx = canvasRef.current!.getContext('2d', { willReadFrequently: true })!
     undo.current.push(ctx.getImageData(0, 0, bitmap.width, bitmap.height))
@@ -218,7 +240,7 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     }
     ctx.putImageData(img, 0, 0)
     setStrokes((n) => n + 1)
-    setPoints([]); setMask(null)
+    clearPrompt()
   }
 
   const refine = async () => {
@@ -242,7 +264,13 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
   }
 
   const onDown = (e: ReactPointerEvent) => {
-    if (mode === 'select') { void addPoint(e); return }
+    if (mode === 'select') {
+      if (embedding !== 'ready') return
+      e.currentTarget.setPointerCapture(e.pointerId)
+      const p = toImage(e)
+      dragFrom.current = { ...p, clientX: e.clientX, clientY: e.clientY }
+      return
+    }
     if (mode === 'restore' && !canRestore) return
     if (mode !== 'detect') {
       const ctx = canvasRef.current!.getContext('2d', { willReadFrequently: true })!
@@ -260,8 +288,16 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     paint(e)
   }
   const onMove = (e: ReactPointerEvent) => {
+    const from = dragFrom.current
+    if (mode === 'select') {
+      if (!from || !e.buttons) return
+      if (Math.hypot(e.clientX - from.clientX, e.clientY - from.clientY) < 6) return
+      const p = toImage(e)
+      setDrag({ x0: Math.min(from.x, p.x), y0: Math.min(from.y, p.y), x1: Math.max(from.x, p.x), y1: Math.max(from.y, p.y) })
+      return
+    }
     const c = cursorRef.current
-    if (c && mode !== 'select') {
+    if (c) {
       const rect = canvasRef.current!.getBoundingClientRect()
       const px = (size * rect.width) / bitmap.width
       c.style.width = c.style.height = `${px}px`
@@ -270,7 +306,15 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     }
     if (e.buttons && last.current !== null) paint(e)
   }
-  const onUp = () => {
+  const onUp = (e: ReactPointerEvent) => {
+    if (mode === 'select') {
+      const started = dragFrom.current
+      dragFrom.current = null
+      if (!started) return
+      if (drag) { const b = drag; setDrag(null); void prompt(points, b) }
+      else void addPoint(e)
+      return
+    }
     if (last.current) {
       if (mode === 'detect') setHasRegion(true)
       else setStrokes((n) => n + 1)
@@ -396,9 +440,20 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
               <button type="button" role="radio" aria-checked={positive} onClick={() => setPositive(true)} className={`rounded px-2 py-1 text-xs ${positive ? 'bg-accent-solid font-semibold text-on-accent' : 'hover:bg-line'}`}>{t.retouch.include}</button>
               <button type="button" role="radio" aria-checked={!positive} onClick={() => setPositive(false)} className={`rounded px-2 py-1 text-xs ${!positive ? 'bg-accent-solid font-semibold text-on-accent' : 'hover:bg-line'}`}>{t.retouch.exclude}</button>
             </span>
-            <button type="button" onClick={() => { setPoints([]); setMask(null) }} disabled={!points.length} className="rounded-md px-2 py-1 text-xs hover:bg-line disabled:opacity-40">{t.retouch.clearPoints}</button>
-            <button type="button" onClick={() => applyMask(false)} disabled={!mask} className="rounded-md border border-line px-3 py-1 text-xs font-semibold hover:bg-line disabled:opacity-40">{t.retouch.removeThis}</button>
-            <button type="button" onClick={() => applyMask(true)} disabled={!mask} className="rounded-md bg-accent-solid px-3 py-1 text-xs font-semibold text-on-accent disabled:opacity-40">{t.retouch.keepThis}</button>
+            {masks && masks.count > 1 && (
+              <span className="flex items-center gap-1 text-xs text-muted">
+                {t.retouch.shape}
+                <span className="flex items-center gap-0.5 rounded-md bg-panel p-0.5" role="radiogroup" aria-label={t.retouch.shape}>
+                  {Array.from({ length: masks.count }, (_, i) => (
+                    <button key={i} type="button" role="radio" aria-checked={variant === i} onClick={() => setVariant(i)}
+                      className={`rounded px-2 py-1 font-mono text-xs ${variant === i ? 'bg-accent-solid font-semibold text-on-accent' : 'hover:bg-line'}`}>{i + 1}</button>
+                  ))}
+                </span>
+              </span>
+            )}
+            <button type="button" onClick={clearPrompt} disabled={!points.length && !box} className="rounded-md px-2 py-1 text-xs hover:bg-line disabled:opacity-40">{t.retouch.clearPoints}</button>
+            <button type="button" onClick={() => applyMask(false)} disabled={!masks} className="rounded-md border border-line px-3 py-1 text-xs font-semibold hover:bg-line disabled:opacity-40">{t.retouch.removeThis}</button>
+            <button type="button" onClick={() => applyMask(true)} disabled={!masks} className="rounded-md bg-accent-solid px-3 py-1 text-xs font-semibold text-on-accent disabled:opacity-40">{t.retouch.keepThis}</button>
           </span>
         )}
         {mode === 'detect' && (
@@ -422,6 +477,11 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
               className={`block size-full touch-none shadow-2xl shadow-black/30 ${mode === 'select' ? 'cursor-crosshair' : 'cursor-none'}`}
             />
             <canvas ref={regionRef} aria-hidden="true" className={`region-overlay pointer-events-none absolute inset-0 size-full ${mode === 'detect' ? 'opacity-60' : mode === 'select' ? 'opacity-45' : 'opacity-0'}`} />
+            {mode === 'select' && (drag ?? box) && (() => {
+              const b = (drag ?? box)!
+              return <span aria-hidden="true" className="pointer-events-none absolute rounded-sm border-2 border-dashed border-accent-solid bg-accent/10"
+                style={{ left: `${(b.x0 / bitmap.width) * 100}%`, top: `${(b.y0 / bitmap.height) * 100}%`, width: `${((b.x1 - b.x0) / bitmap.width) * 100}%`, height: `${((b.y1 - b.y0) / bitmap.height) * 100}%` }} />
+            })()}
             {mode === 'select' && points.map((p, i) => (
               <span key={i} aria-hidden="true" className={`pointer-events-none absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow ${p.label ? 'bg-accent-solid' : 'bg-danger'}`} style={{ left: `${(p.x / bitmap.width) * 100}%`, top: `${(p.y / bitmap.height) * 100}%` }} />
             ))}

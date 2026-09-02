@@ -44,6 +44,17 @@ export function cropBitmap(bmp: Bitmap, x: number, y: number, w: number, h: numb
   return { data, width: w, height: h }
 }
 
+export function resizeBitmap(bmp: Bitmap, w: number, h: number): Bitmap {
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(toCanvas(bmp), 0, 0, w, h)
+  const { data } = ctx.getImageData(0, 0, w, h)
+  return { data, width: w, height: h }
+}
+
 export function inspectAlpha({ data, width, height }: Bitmap, threshold = 8) {
   let transparent = false
   let minX = width, minY = height, maxX = -1, maxY = -1

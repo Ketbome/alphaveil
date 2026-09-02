@@ -3,30 +3,35 @@ import { compareBase, type Step } from '../lib/history'
 import type { Bitmap } from '../lib/worker'
 
 const bmp = (w: number): Bitmap => ({ data: new Uint8ClampedArray(w * 4), width: w, height: 1 })
-const step = (kind: Step['kind'], w: number): Step => ({ kind, bitmap: bmp(w) })
+const source = (w: number): Step => {
+  const b = bmp(w)
+  return { kind: 'source', bitmap: b, origin: b }
+}
+const step = (kind: Step['kind'], w: number, origin: Bitmap): Step => ({ kind, bitmap: bmp(w), origin })
 
 describe('compareBase', () => {
-  it('needs at least two steps', () => {
-    expect(compareBase([step('source', 10)])).toBeNull()
+  it('needs something done to the photo', () => {
+    expect(compareBase([source(10)])).toBeNull()
   })
 
-  it('compares a background removal against the source', () => {
-    const h = [step('source', 10), step('bg', 10)]
+  it('compares a background removal against the original', () => {
+    const h = [source(10)]
+    h.push(step('bg', 10, h[0].origin))
     expect(compareBase(h)).toBe(h[0].bitmap)
   })
 
-  it('uses the crop as the base once the image was cropped', () => {
-    const h = [step('source', 10), step('crop', 6), step('bg', 6)]
-    expect(compareBase(h)).toBe(h[1].bitmap)
+  it('keeps comparing against the original after a crop, reframed the same way', () => {
+    const h = [source(10)]
+    h.push(step('bg', 10, h[0].origin))
+    const cropped = bmp(6)
+    h.push({ kind: 'crop', bitmap: bmp(6), origin: cropped })
+    expect(compareBase(h)).toBe(cropped)
   })
 
-  it('uses the latest framing step, skipping older AI steps', () => {
-    const h = [step('source', 10), step('bg', 10), step('trim', 7), step('upscale', 14)]
-    expect(compareBase(h)).toBe(h[2].bitmap)
-  })
-
-  it('has nothing to compare right after a crop or trim', () => {
-    expect(compareBase([step('source', 10), step('crop', 6)])).toBeNull()
-    expect(compareBase([step('source', 10), step('bg', 10), step('trim', 6)])).toBeNull()
+  it('has nothing to compare while only the framing changed', () => {
+    const h = [source(10)]
+    const crop = bmp(6)
+    h.push({ kind: 'crop', bitmap: crop, origin: crop })
+    expect(compareBase(h)).toBeNull()
   })
 })

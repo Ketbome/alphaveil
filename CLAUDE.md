@@ -14,9 +14,9 @@ Vite 8, React 19, TypeScript, Tailwind 4 (`@tailwindcss/vite`, theme tokens in `
 
 ## Structure
 
-- `src/lib/worker.ts` — Web Worker: loads models, runs background removal (AutoModel + AutoProcessor, not the pipeline registry), tiled Swin2SR upscaling, SlimSAM (`samEmbed` once per image, `samMask` per click set) and ViTMatte refinement (`matte`: trimap from the current alpha, run at ≤1024 px, alpha resized back).
+- `src/lib/worker.ts` — Web Worker: loads models, runs background removal (AutoModel + AutoProcessor, not the pipeline registry), tiled Swin2SR upscaling, EdgeTAM / SAM 2 (`samEmbed` once per image, `samMask` per click set and optional box; returns the three candidate masks with the best index) and ViTMatte refinement (`matte`: trimap from the current alpha, run at ≤1024 px, alpha resized back). A run that dies on the WebGPU storage-buffer limit drops its cached session (`evict`) so the client can reload the model on WASM.
 - `src/lib/engine.ts` — promise-based client for the worker (progress/status callbacks).
-- `src/lib/models.ts` — model catalog (ids, dtypes per device, sizes, licenses).
+- `src/lib/models.ts` — model catalog (ids, dtypes per device, sizes, licenses) plus device selection: `modelDevice` also honours `runtime.blocked`, the ids that hit the GPU storage-buffer limit on this machine (kept in `localStorage.gpuBlocked`, refilled by `onGpuLimit` in `App.tsx`, which retries the operation once on WASM). `isGpuLimit` matches that onnxruntime-web error.
 - `src/lib/image.ts` — canvas helpers: file → bitmap, crop, trim, `smartCrop` (frame the subject), `composeBackdrop` (color / blurred photo + shadow), `exportBlob` with optional byte cap.
 - `src/lib/install.ts` — `beforeinstallprompt` hook for the PWA install button; `vite-plugin-pwa` (config in `vite.config.ts`) emits the manifest and a precaching service worker. Icons: `public/icon-192.png`, `public/icon-512.png`.
 - `src/i18n/` — `en.ts` is the typed base dictionary (`Dict`); `es`, `pt`, `fr` must match it. `index.tsx` has the provider, `useI18n()`, URL-prefix detection (`/es/` wins over saved/browser language) and rewrites the URL on switch without reloading.
@@ -24,9 +24,10 @@ Vite 8, React 19, TypeScript, Tailwind 4 (`@tailwindcss/vite`, theme tokens in `
 - `src/lib/theme.ts` — light / dark / system, stored in `localStorage`, applied as `data-theme` on `<html>`.
 - `src/components/` — `Tooltip` / `Popover` (Floating UI), `Dropzone`, `ImageQueue`, `CropDialog`, `ModelPicker`, `RuntimeStatus`, `SuggestedActions`, `CompareView`, `Showcase`, `MaskEditor` (erase with optional color-tolerance / restore / AI-in-area brush over the alpha; restore copies pixels from the last opaque step, so it needs matching dimensions; AI-in-area crops the painted bbox, runs `engine.removeBg` via `onDetect` and blends the new alpha weighted by the brush mask).
 - `public/showcase/*.webp` — real cutouts produced by the app (trimmed, ≤900 px, alpha). `Showcase` floats them around the upload card on desktop and as a strip on mobile; prompts to regenerate sources live in `docs/asset-prompts.md`.
-- `src/lib/history.ts` — `Step { bitmap, kind }` and `compareBase()`: the before/after curtain compares against the latest framing step (source, crop or trim), never across a crop.
-- `src/App.tsx` — image queue (max 8, one active, 6-step history each), toolbar, export, batch (`removeBgAll`, `downloadAll`).
-- `QualityChip` maps `ModelSpec.tier` (fast/balanced/best/max) to plain-language names; keep every user-selectable background model tagged with a tier. `SAM_MODEL` / `MATTE_MODEL` are fixed helpers, not user-selectable.
+- `src/lib/history.ts` — `Step { bitmap, kind, origin }`: `origin` is the original photo carried through the same crops, trims and upscales, so `compareBase()` always compares against the original, aligned. While only the framing changed, `origin` is the same object as `bitmap` and there is nothing to compare. `reframe()` in `App.tsx` is the only way to crop or trim.
+- `src/App.tsx` — image queue (max 8, one active, 6-step history each), toolbar, export, batch (`removeBgAll`, `downloadAll`). `ImageQueue` floats over the preview canvas (thumbnails plus a ghost tile with `+`), it is not a row of its own.
+- `QualityChip` maps `ModelSpec.tier` (fast/balanced/best/max) to plain-language names; keep every user-selectable background model tagged with a tier. BiRefNet (full) has no tier: it only shows under "technical details". `SAM_MODEL` (EdgeTAM) / `MATTE_MODEL` are fixed helpers, not user-selectable.
+- With no saved preference the app starts on the finest tier the machine can run (`bestAvailable`), and the before/after comparison is on by default.
 - Background model order in `models.ts` is the default order: RMBG 1.4 first (best general cutouts), MODNet last as the light fallback. Keep it that way unless the user asks.
 
 ## Conventions

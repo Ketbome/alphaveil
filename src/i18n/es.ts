@@ -90,7 +90,8 @@ export const es: Dict = {
     smart: 'Solo colores parecidos',
     tolerance: 'Tolerancia',
     select: 'Clic en objeto',
-    selectHint: 'Haz clic sobre lo que quieres conservar. Más clics amplían la selección; usa Excluir para partes que sobran.',
+    selectHint: 'Haz clic sobre lo que quieres conservar o arrastra un recuadro alrededor. Más clics amplían la selección; usa Excluir para partes que sobran.',
+    shape: 'Forma',
     analyzing: 'Analizando la imagen…',
     pointType: 'Tipo de punto',
     include: '+ Incluir',
@@ -122,7 +123,7 @@ export const es: Dict = {
   showcase: {
     label: 'Resultados hechos con Alphaveil',
     alt: (model) => `Recorte generado localmente con ${model}`,
-    tags: { hair: 'pelo', mesh: 'malla', fineEdges: 'bordes finos', fur: 'pelaje', upscaled: 'escalado ×4' },
+    tags: { hair: 'pelo', mesh: 'malla', fineEdges: 'bordes finos', fur: 'pelaje', whiskers: 'bigotes', upscaled: 'escalado ×4' },
   },
   compare: { toggle: 'Comparar', before: 'Antes', after: 'Después', hint: 'Arrastra la cortina para comparar el antes y el después' },
   exportOpts: {
@@ -150,11 +151,13 @@ export const es: Dict = {
     fallback: (have, need) => `Tu GPU admite ${have} buffers por shader; este modelo requiere ${need}.`,
     useCpu: 'Se usará CPU.',
     noCpu: 'No se habilita en CPU por su consumo de memoria.',
+    blocked: 'A esta GPU se le acabaron los buffers de shader con este modelo.',
     entries: {
       'Xenova/modnet': { profile: 'Compatible · rápido', hint: 'Optimizado para personas, pelo y videollamadas.' },
       'briaai/RMBG-1.4': { profile: 'General · no comercial', hint: 'Buen equilibrio para productos, personas y objetos.', warning: 'Los pesos permiten únicamente uso no comercial.' },
       'onnx-community/BiRefNet_lite-ONNX': { profile: 'General · recomendado', hint: 'Buen equilibrio para productos, personas y bordes finos.' },
       'onnx-community/BiRefNet-ONNX': { profile: 'Máxima calidad', hint: 'Máxima calidad. Pesado: requiere GPU con memoria suficiente.', warning: 'Puede superar la memoria disponible en GPUs integradas.' },
+      'onnx-community/BEN2-ONNX': { profile: 'Calidad máxima', hint: 'Los bordes más finos en pelo, pelaje y plantas. Descarga grande y necesita una GPU capaz.' },
       'Xenova/swin2SR-lightweight-x2-64': { profile: 'Rápido · ×2', hint: 'Duplica la resolución. Muy rápido.' },
       'onnx-community/swin2SR-realworld-sr-x4-64-bsrgan-psnr-ONNX': { profile: 'Restauración · ×4', hint: 'Cuadruplica la resolución y limpia compresión JPEG.' },
     },
@@ -191,6 +194,7 @@ export const es: Dict = {
     export: 'No se pudo exportar la imagen',
     tooMany: (max) => `Solo puedes tener ${max} imágenes abiertas; se omitieron los archivos extra.`,
     unsupported: (name) => `${name} no es una imagen compatible.`,
+    gpuLimit: (name) => `${name} necesita más de lo que da esta GPU y pesa demasiado para la CPU. Elige otra calidad.`,
   },
   seo: {
     title: 'Alphaveil · Quitar el fondo de imágenes con IA en tu navegador',

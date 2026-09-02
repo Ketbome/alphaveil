@@ -1,4 +1,4 @@
-import type { Bitmap, Mask, Point, Request, Response, Status } from './worker'
+import type { Bitmap, Box, Mask, Masks, Point, Request, Response, Status } from './worker'
 import type { Device, Runtime } from './models'
 
 export interface Progress {
@@ -57,7 +57,7 @@ export const engine = {
     send<Bitmap>({ type: 'upscale', image, scale }, { status: onStatus }),
   samEmbed: (image: Bitmap, device: Device, onProgress: (p: Progress) => void, onStatus: (s: Status) => void) =>
     send<null>({ type: 'samEmbed', image, device }, { progress: onProgress, status: onStatus }),
-  samMask: (points: Point[]) => send<Mask>({ type: 'samMask', points }),
+  samMask: (points: Point[], box: Box | null) => send<Masks>({ type: 'samMask', points, box }),
   matte: (image: Bitmap, device: Device, onProgress: (p: Progress) => void, onStatus: (s: Status) => void) =>
     send<Mask>({ type: 'matte', image, device }, { progress: onProgress, status: onStatus }),
   reset() {
