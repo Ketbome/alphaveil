@@ -12,12 +12,15 @@ Live: https://ketbome.github.io/alphaveil/
 - **AI upscale** — Swin2SR ×2 (lightweight) or ×4 (real-world, JPEG-artifact aware), tiled to keep GPU memory bounded. Alpha is preserved.
 - **Export** — PNG / WebP with transparency, or JPG with a solid background; preview on checkerboard or any color.
 - **Frame subject** — after removing the background, crop around the detected subject in 1:1, 4:5, 3:4, 9:16, 16:9 or tight.
+- **Click the object** — SlimSAM (Segment Anything) click-to-select: include / exclude points, then keep only the object or remove it. This is the tool for busy scenes where the automatic model keeps the couch or the blanket.
+- **Refine edges** — ViTMatte recomputes hair and fur edges from a trimap built around the current mask.
 - **Retouch mask** — brush to erase leftover background (optionally only colors similar to where the stroke started, so it stops at the subject), restore parts of the subject from the original photo, or **paint an area and run the model only there** (the crop is segmented at full model resolution and blended back with the brush's soft edge). Softness, zoom and undo.
 - **Backdrop** — bake a solid color or a blurred copy of the original photo behind the subject, with an optional soft shadow.
 - **Batch** — remove the background of every open image in one go and download everything as a ZIP.
 - **Size cap** — export JPG / WebP under 200 KB, 500 KB or 1 MB (quality is searched automatically).
 - **Before / after curtain** — compare against the last framing step (source or crop), with a draggable divider.
 - **Installable (PWA)** — service worker precaches the app shell; models stay in the browser cache, so it works offline after the first run.
+- **Plain-language quality picker** — Fast / Balanced / High / Maximum next to the Remove background button (technical model details one click deeper), a first-run tip, and automatic suggestions when a cutout looks like it kept the background.
 - **Image queue** — up to 8 images open at once, one active at a time, each with its own undo history (last 6 steps kept).
 - **Light / dark theme** (follows the system by default) and **4 languages**: English (base), Spanish, Portuguese, French, auto-detected from the browser.
 - Undo history, drag & drop, clipboard paste.
@@ -30,6 +33,8 @@ Live: https://ketbome.github.io/alphaveil/
 | Background | [onnx-community/BiRefNet_lite-ONNX](https://huggingface.co/onnx-community/BiRefNet_lite-ONNX) | 115 MB (fp16) | MIT |
 | Background | [onnx-community/BiRefNet-ONNX](https://huggingface.co/onnx-community/BiRefNet-ONNX) | 490 MB (fp16) | MIT |
 | Background (fallback) | [Xenova/modnet](https://huggingface.co/Xenova/modnet) | 13 MB (fp16) | Apache 2.0 |
+| Click-to-select | [Xenova/slimsam-77-uniform](https://huggingface.co/Xenova/slimsam-77-uniform) | 21 MB (fp16) | Apache 2.0 |
+| Edge matting | [Xenova/vitmatte-small-composition-1k](https://huggingface.co/Xenova/vitmatte-small-composition-1k) | 104 MB (fp32) / 28 MB (q8) | Apache 2.0 |
 | Upscale ×2 | [Xenova/swin2SR-lightweight-x2-64](https://huggingface.co/Xenova/swin2SR-lightweight-x2-64) | 8 MB | Apache 2.0 |
 | Upscale ×4 | [onnx-community/swin2SR-realworld-sr-x4-64-bsrgan-psnr](https://huggingface.co/onnx-community/swin2SR-realworld-sr-x4-64-bsrgan-psnr-ONNX) | 54 MB | Apache 2.0 |
 

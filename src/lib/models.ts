@@ -7,8 +7,11 @@ export interface Runtime {
   maxStorageBuffersPerShaderStage: number
 }
 
+export type Tier = 'fast' | 'balanced' | 'best' | 'max'
+
 export interface ModelSpec {
   id: string
+  tier?: Tier
   revision: string
   name: string
   license: 'Apache 2.0' | 'MIT' | 'BRIA non-commercial'
@@ -23,6 +26,7 @@ export const BG_MODELS: ModelSpec[] = [
     id: 'briaai/RMBG-1.4',
     revision: '2ceba5a5efaec153162aedea169f76caf9b46cf8',
     name: 'RMBG 1.4',
+    tier: 'balanced',
     license: 'BRIA non-commercial',
     size: { fp16: '88 MB', fp32: '176 MB', q8: '44 MB' },
     dtype: { webgpu: 'fp16', wasm: 'q8' },
@@ -31,6 +35,7 @@ export const BG_MODELS: ModelSpec[] = [
     id: 'onnx-community/BiRefNet_lite-ONNX',
     revision: 'de15b22ba131738a16dff04aab8bdf8dc32e3ac1',
     name: 'BiRefNet Lite',
+    tier: 'best',
     license: 'MIT',
     size: { fp16: '115 MB', fp32: '224 MB' },
     dtype: { webgpu: 'fp16', wasm: 'fp32' },
@@ -41,6 +46,7 @@ export const BG_MODELS: ModelSpec[] = [
     id: 'onnx-community/BiRefNet-ONNX',
     revision: '534d3c82d3bb8b2f0867db6dfbc3a525b8e42f67',
     name: 'BiRefNet',
+    tier: 'max',
     license: 'MIT',
     size: { fp16: '490 MB', fp32: '973 MB' },
     dtype: { webgpu: 'fp16', wasm: 'fp32' },
@@ -51,6 +57,7 @@ export const BG_MODELS: ModelSpec[] = [
     id: 'Xenova/modnet',
     revision: 'fa2fa546052fba4c08921230a26cc69a333fca12',
     name: 'MODNet',
+    tier: 'fast',
     license: 'Apache 2.0',
     size: { fp16: '13 MB', fp32: '26 MB', q8: '6.3 MB' },
     dtype: { webgpu: 'fp16', wasm: 'q8' },
@@ -101,3 +108,7 @@ export function modelDtype(model: ModelSpec, runtime: Runtime): DType {
 export function modelSize(model: ModelSpec, runtime: Runtime) {
   return model.size[modelDtype(model, runtime)] ?? '—'
 }
+
+// Fixed helper models (not user-selectable): click-to-select and edge matting.
+export const SAM_MODEL = { id: 'Xenova/slimsam-77-uniform', revision: '5850ab45f587c112167512ffef949107115e26a0', name: 'SlimSAM', size: '21 MB' }
+export const MATTE_MODEL = { id: 'Xenova/vitmatte-small-composition-1k', revision: '6bc1297f6140f055a227b6d2cfe8c093281f35d2', name: 'ViTMatte', size: '104 MB (28 MB on CPU)' }

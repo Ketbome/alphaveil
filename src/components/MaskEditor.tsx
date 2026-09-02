@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Eraser, Loader2, Paintbrush, Undo2, WandSparkles, X } from 'lucide-react'
-import type { Bitmap } from '../lib/worker'
+import { Eraser, Loader2, MousePointerClick, Paintbrush, Sparkles, Undo2, WandSparkles, X } from 'lucide-react'
+import type { Bitmap, Mask, Point } from '../lib/worker'
 import { toCanvas } from '../lib/image'
 import { useI18n } from '../i18n'
 
@@ -10,12 +10,16 @@ interface Props {
   onCancel: () => void
   onApply: (result: Bitmap) => void
   onDetect: (crop: Bitmap) => Promise<Bitmap>
+  onSamEmbed: (image: Bitmap) => Promise<void>
+  onSamMask: (points: Point[]) => Promise<Mask>
+  onMatte: (image: Bitmap) => Promise<Mask>
+  initialMode?: Mode
 }
 
-type Mode = 'erase' | 'restore' | 'detect'
+export type Mode = 'erase' | 'restore' | 'detect' | 'select'
 const MAX_UNDO = 6
 
-export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Props) {
+export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamEmbed, onSamMask, onMatte, initialMode }: Props) {
   const { t } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const regionRef = useRef<HTMLCanvasElement>(null)
@@ -24,7 +28,13 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
   const undo = useRef<ImageData[]>([])
   const last = useRef<{ x: number; y: number } | null>(null)
   const opaque = !bitmap.data.some((v, i) => i % 4 === 3 && v < 255)
-  const [mode, setMode] = useState<Mode>(opaque ? 'detect' : 'erase')
+  const [mode, setMode] = useState<Mode>(initialMode ?? (opaque ? 'select' : 'erase'))
+  const [points, setPoints] = useState<Point[]>([])
+  const [positive, setPositive] = useState(true)
+  const [mask, setMask] = useState<Mask | null>(null)
+  const [embedding, setEmbedding] = useState<'idle' | 'loading' | 'ready'>('idle')
+  const [refining, setRefining] = useState(false)
+  const embedded = useRef(false)
   const [hasRegion, setHasRegion] = useState(false)
   const [detecting, setDetecting] = useState(false)
   const [size, setSize] = useState(Math.max(12, Math.round(Math.max(bitmap.width, bitmap.height) / 30)))
@@ -49,6 +59,30 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
     region.height = bitmap.height
     undo.current = []
   }, [bitmap, source, canRestore])
+
+  useEffect(() => {
+    if (mode !== 'select' || embedded.current) return
+    embedded.current = true
+    setEmbedding('loading')
+    const src = sourceData.current ?? bitmap.data
+    onSamEmbed({ data: src, width: bitmap.width, height: bitmap.height }).then(() => setEmbedding('ready')).catch(() => { embedded.current = false; setEmbedding('idle') })
+  }, [mode, bitmap, onSamEmbed])
+
+  useEffect(() => {
+    const overlay = regionRef.current
+    if (!overlay) return
+    const rc = overlay.getContext('2d', { willReadFrequently: true })!
+    if (mode !== 'select') return
+    rc.clearRect(0, 0, bitmap.width, bitmap.height)
+    if (!mask) return
+    const img = rc.createImageData(bitmap.width, bitmap.height)
+    for (let i = 0; i < mask.data.length; i++) {
+      if (!mask.data[i]) continue
+      const o = i * 4
+      img.data[o] = 223; img.data[o + 1] = 122; img.data[o + 2] = 68; img.data[o + 3] = 255
+    }
+    rc.putImageData(img, 0, 0)
+  }, [mask, mode, bitmap])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
@@ -136,7 +170,79 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
     last.current = p
   }
 
+  const addPoint = async (e: ReactPointerEvent) => {
+    if (embedding !== 'ready') return
+    const p = toImage(e)
+    const next = [...points, { x: Math.round(p.x), y: Math.round(p.y), label: (e.altKey ? !positive : positive) ? 1 : 0 } as Point]
+    setPoints(next)
+    setMask(await onSamMask(next))
+  }
+
+  const feathered = (m: Mask) => {
+    // 3x3 box blur twice: softens the hard SAM edge by ~1.5 px
+    const { width: w, height: h } = m
+    let a = m.data
+    for (let pass = 0; pass < 2; pass++) {
+      const b = new Uint8ClampedArray(w * h)
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        let sum = 0, n = 0
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const yy = y + dy, xx = x + dx
+          if (yy < 0 || yy >= h || xx < 0 || xx >= w) continue
+          sum += a[yy * w + xx]; n++
+        }
+        b[y * w + x] = Math.round(sum / n)
+      }
+      a = b
+    }
+    return a
+  }
+
+  const applyMask = (keep: boolean) => {
+    if (!mask) return
+    const ctx = canvasRef.current!.getContext('2d', { willReadFrequently: true })!
+    undo.current.push(ctx.getImageData(0, 0, bitmap.width, bitmap.height))
+    if (undo.current.length > MAX_UNDO) undo.current.shift()
+    const img = ctx.getImageData(0, 0, bitmap.width, bitmap.height)
+    const m = feathered(mask)
+    const src = sourceData.current
+    for (let i = 0; i < m.length; i++) {
+      const o = i * 4 + 3
+      const k = m[i] / 255
+      if (keep) {
+        img.data[o] = Math.round(k * 255)
+        if (src && k > 0) { img.data[o - 3] = src[o - 3]; img.data[o - 2] = src[o - 2]; img.data[o - 1] = src[o - 1] }
+      } else {
+        img.data[o] = Math.round(img.data[o] * (1 - k))
+      }
+    }
+    ctx.putImageData(img, 0, 0)
+    setStrokes((n) => n + 1)
+    setPoints([]); setMask(null)
+  }
+
+  const refine = async () => {
+    const ctx = canvasRef.current!.getContext('2d', { willReadFrequently: true })!
+    const img = ctx.getImageData(0, 0, bitmap.width, bitmap.height)
+    const rgb = sourceData.current
+    const input = new Uint8ClampedArray(img.data)
+    if (rgb) for (let i = 0; i < input.length; i += 4) { input[i] = rgb[i]; input[i + 1] = rgb[i + 1]; input[i + 2] = rgb[i + 2] }
+    setRefining(true)
+    try {
+      const m = await onMatte({ data: input, width: bitmap.width, height: bitmap.height })
+      undo.current.push(img)
+      if (undo.current.length > MAX_UNDO) undo.current.shift()
+      const next = ctx.getImageData(0, 0, bitmap.width, bitmap.height)
+      for (let i = 0; i < m.data.length; i++) next.data[i * 4 + 3] = m.data[i]
+      ctx.putImageData(next, 0, 0)
+      setStrokes((n) => n + 1)
+    } finally {
+      setRefining(false)
+    }
+  }
+
   const onDown = (e: ReactPointerEvent) => {
+    if (mode === 'select') { void addPoint(e); return }
     if (mode === 'restore' && !canRestore) return
     if (mode !== 'detect') {
       const ctx = canvasRef.current!.getContext('2d', { willReadFrequently: true })!
@@ -155,7 +261,7 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
   }
   const onMove = (e: ReactPointerEvent) => {
     const c = cursorRef.current
-    if (c) {
+    if (c && mode !== 'select') {
       const rect = canvasRef.current!.getBoundingClientRect()
       const px = (size * rect.width) / bitmap.width
       c.style.width = c.style.height = `${px}px`
@@ -243,10 +349,15 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
       <header className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2.5 sm:px-4">
         <div className="mr-2 font-medium">{t.retouch.title}</div>
         <div className="flex items-center gap-0.5 rounded-lg bg-panel p-1" role="radiogroup">
+          {modeBtn('select', <MousePointerClick className="size-3.5" />, t.retouch.select)}
           {modeBtn('erase', <Eraser className="size-3.5" />, t.retouch.erase)}
           {modeBtn('restore', <Paintbrush className="size-3.5" />, t.retouch.restore, !canRestore)}
           {modeBtn('detect', <WandSparkles className="size-3.5" />, t.retouch.detect)}
         </div>
+        <button type="button" onClick={refine} disabled={refining || opaque && strokes === 0} className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-semibold hover:bg-line disabled:opacity-40" title={t.retouch.refineHint}>
+          {refining ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}{refining ? t.busy.matting : t.retouch.refine}
+        </button>
+        {mode !== 'select' && (<>
         <label className="flex items-center gap-2 text-xs text-muted">
           {t.retouch.size}
           <input type="range" min={4} max={Math.max(40, Math.round(Math.max(bitmap.width, bitmap.height) / 6))} value={size} onChange={(e) => setSize(Number(e.target.value))} className="w-24 accent-accent-solid" />
@@ -255,6 +366,7 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
           {t.retouch.softness}
           <input type="range" min={0} max={0.9} step={0.05} value={softness} onChange={(e) => setSoftness(Number(e.target.value))} className="w-20 accent-accent-solid" />
         </label>
+        </>)}
         {mode === 'erase' && (
           <>
             <label className="flex items-center gap-1.5 text-xs text-muted">
@@ -277,7 +389,18 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
         <button type="button" onClick={onCancel} className="ml-auto rounded-md p-1.5 hover:bg-line" aria-label={t.crop.close}><X className="size-5" /></button>
       </header>
       <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-1.5">
-        <p className="text-xs text-muted">{mode === 'erase' ? (smart ? t.retouch.smartHint : t.retouch.eraseHint) : mode === 'restore' ? t.retouch.restoreHint : t.retouch.detectHint}</p>
+        <p className="text-xs text-muted">{mode === 'select' ? (embedding === 'loading' ? t.retouch.analyzing : t.retouch.selectHint) : mode === 'erase' ? (smart ? t.retouch.smartHint : t.retouch.eraseHint) : mode === 'restore' ? t.retouch.restoreHint : t.retouch.detectHint}</p>
+        {mode === 'select' && (
+          <span className="ml-auto flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-0.5 rounded-md bg-panel p-0.5" role="radiogroup" aria-label={t.retouch.pointType}>
+              <button type="button" role="radio" aria-checked={positive} onClick={() => setPositive(true)} className={`rounded px-2 py-1 text-xs ${positive ? 'bg-accent-solid font-semibold text-on-accent' : 'hover:bg-line'}`}>{t.retouch.include}</button>
+              <button type="button" role="radio" aria-checked={!positive} onClick={() => setPositive(false)} className={`rounded px-2 py-1 text-xs ${!positive ? 'bg-accent-solid font-semibold text-on-accent' : 'hover:bg-line'}`}>{t.retouch.exclude}</button>
+            </span>
+            <button type="button" onClick={() => { setPoints([]); setMask(null) }} disabled={!points.length} className="rounded-md px-2 py-1 text-xs hover:bg-line disabled:opacity-40">{t.retouch.clearPoints}</button>
+            <button type="button" onClick={() => applyMask(false)} disabled={!mask} className="rounded-md border border-line px-3 py-1 text-xs font-semibold hover:bg-line disabled:opacity-40">{t.retouch.removeThis}</button>
+            <button type="button" onClick={() => applyMask(true)} disabled={!mask} className="rounded-md bg-accent-solid px-3 py-1 text-xs font-semibold text-on-accent disabled:opacity-40">{t.retouch.keepThis}</button>
+          </span>
+        )}
         {mode === 'detect' && (
           <span className="ml-auto flex items-center gap-2">
             <button type="button" onClick={clearRegion} disabled={!hasRegion || detecting} className="rounded-md px-2 py-1 text-xs hover:bg-line disabled:opacity-40">{t.retouch.clear}</button>
@@ -296,9 +419,15 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect }: Prop
               onPointerMove={onMove}
               onPointerUp={onUp}
               onPointerCancel={onUp}
-              className="block size-full cursor-none touch-none shadow-2xl shadow-black/30"
+              className={`block size-full touch-none shadow-2xl shadow-black/30 ${mode === 'select' ? 'cursor-crosshair' : 'cursor-none'}`}
             />
-            <canvas ref={regionRef} aria-hidden="true" className={`region-overlay pointer-events-none absolute inset-0 size-full ${mode === 'detect' ? 'opacity-60' : 'opacity-0'}`} />
+            <canvas ref={regionRef} aria-hidden="true" className={`region-overlay pointer-events-none absolute inset-0 size-full ${mode === 'detect' ? 'opacity-60' : mode === 'select' ? 'opacity-45' : 'opacity-0'}`} />
+            {mode === 'select' && points.map((p, i) => (
+              <span key={i} aria-hidden="true" className={`pointer-events-none absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow ${p.label ? 'bg-accent-solid' : 'bg-danger'}`} style={{ left: `${(p.x / bitmap.width) * 100}%`, top: `${(p.y / bitmap.height) * 100}%` }} />
+            ))}
+            {mode === 'select' && embedding === 'loading' && (
+              <div className="absolute inset-0 grid place-items-center bg-ink/50"><Loader2 className="size-8 animate-spin text-accent" /></div>
+            )}
           </div>
         </div>
       </div>

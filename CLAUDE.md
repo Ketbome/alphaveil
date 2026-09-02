@@ -14,7 +14,7 @@ Vite 8, React 19, TypeScript, Tailwind 4 (`@tailwindcss/vite`, theme tokens in `
 
 ## Structure
 
-- `src/lib/worker.ts` — Web Worker: loads models, runs background removal (AutoModel + AutoProcessor, not the pipeline registry) and tiled Swin2SR upscaling.
+- `src/lib/worker.ts` — Web Worker: loads models, runs background removal (AutoModel + AutoProcessor, not the pipeline registry), tiled Swin2SR upscaling, SlimSAM (`samEmbed` once per image, `samMask` per click set) and ViTMatte refinement (`matte`: trimap from the current alpha, run at ≤1024 px, alpha resized back).
 - `src/lib/engine.ts` — promise-based client for the worker (progress/status callbacks).
 - `src/lib/models.ts` — model catalog (ids, dtypes per device, sizes, licenses).
 - `src/lib/image.ts` — canvas helpers: file → bitmap, crop, trim, `smartCrop` (frame the subject), `composeBackdrop` (color / blurred photo + shadow), `exportBlob` with optional byte cap.
@@ -26,6 +26,7 @@ Vite 8, React 19, TypeScript, Tailwind 4 (`@tailwindcss/vite`, theme tokens in `
 - `public/showcase/*.webp` — real cutouts produced by the app (trimmed, ≤900 px, alpha). `Showcase` floats them around the upload card on desktop and as a strip on mobile; prompts to regenerate sources live in `docs/asset-prompts.md`.
 - `src/lib/history.ts` — `Step { bitmap, kind }` and `compareBase()`: the before/after curtain compares against the latest framing step (source, crop or trim), never across a crop.
 - `src/App.tsx` — image queue (max 8, one active, 6-step history each), toolbar, export, batch (`removeBgAll`, `downloadAll`).
+- `QualityChip` maps `ModelSpec.tier` (fast/balanced/best/max) to plain-language names; keep every user-selectable background model tagged with a tier. `SAM_MODEL` / `MATTE_MODEL` are fixed helpers, not user-selectable.
 - Background model order in `models.ts` is the default order: RMBG 1.4 first (best general cutouts), MODNet last as the light fallback. Keep it that way unless the user asks.
 
 ## Conventions

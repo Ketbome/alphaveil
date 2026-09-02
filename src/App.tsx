@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  ArrowRight, Code2, Columns2, Crop, Focus, MonitorDown, PaintBucket, Paintbrush, Plus, Download, Eraser, HardDrive, Languages, Loader2, LockKeyhole, Monitor, Moon, Scissors, Settings2, Sparkles, Sun, Trash2, Undo2,
+  Code2, Columns2, Crop, Focus, MonitorDown, MousePointerClick, PaintBucket, Paintbrush, Plus, X, Download, Eraser, HardDrive, Languages, Loader2, LockKeyhole, Monitor, Moon, Scissors, Settings2, Sparkles, Sun, Trash2, Undo2,
 } from 'lucide-react'
 import type { Area } from 'react-easy-crop'
 import { engine, type Progress } from './lib/engine'
-import type { Bitmap, Status } from './lib/worker'
+import type { Bitmap, Point, Status } from './lib/worker'
 import { BG_MODELS, NO_RUNTIME, SR_MODELS, SR_SCALE, modelAvailable, modelDevice, modelDtype, type ModelSpec, type Runtime } from './lib/models'
 import { composeBackdrop, cropBitmap, download, exportBlob, fileToBitmap, formatBytes, inspectAlpha, smartCrop, toDataUrl, toThumbnailDataUrl, trimTransparent } from './lib/image'
 import { zipSync } from 'fflate'
@@ -22,8 +22,9 @@ import { ImageQueue } from './components/ImageQueue'
 import { SuggestedActions, type SuggestedAction } from './components/SuggestedActions'
 import { Logo } from './components/Logo'
 import { CompareView } from './components/CompareView'
-import { MaskEditor } from './components/MaskEditor'
+import { MaskEditor, type Mode as RetouchMode } from './components/MaskEditor'
 import { Showcase } from './components/Showcase'
+import { QualityChip } from './components/QualityChip'
 
 type Format = 'png' | 'jpeg' | 'webp'
 
@@ -59,7 +60,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [cropSrc, setCropSrc] = useState<string | null>(null)
   const [compare, setCompare] = useState(false)
-  const [retouching, setRetouching] = useState(false)
+  const [retouching, setRetouching] = useState<RetouchMode | null>(null)
+  const [tipSeen, setTipSeen] = useState(() => stored('tipSeen', '') === '1')
   const [preview, setPreview] = useState<string>('checker')
   const [format, setFormat] = useState<Format>('png')
   const [quality, setQuality] = useState(0.92)
@@ -73,7 +75,12 @@ export default function App() {
   const blurSource = active ? lastOpaque(active.history, (b) => !inspectAlpha(b).transparent) : null
   const install = useInstallPrompt()
   const canCompare = !!before
-  const { transparent, trimmable } = useMemo(() => (current ? inspectAlpha(current) : { transparent: false, trimmable: false }), [current])
+  const { transparent, trimmable, opaqueFraction } = useMemo(() => {
+    if (!current) return { transparent: false, trimmable: false, opaqueFraction: 0 }
+    let n = 0
+    for (let i = 3; i < current.data.length; i += 4) if (current.data[i] > 127) n++
+    return { ...inspectAlpha(current), opaqueFraction: n / (current.width * current.height) }
+  }, [current])
   const requestedBg = BG_MODELS.find((model) => model.id === bgModel) ?? BG_MODELS[0]
   const selectedBg = runtime && !modelAvailable(requestedBg, runtime)
     ? BG_MODELS.find((model) => modelAvailable(model, runtime)) ?? BG_MODELS[0]
@@ -107,7 +114,7 @@ export default function App() {
     })
   }
 
-  const onStatus = (s: Status) => setBusy(s.key === 'segmenting' ? t.busy.segmenting : t.busy.upscaling(s.done, s.total))
+  const onStatus = (s: Status) => setBusy(s.key === 'segmenting' ? t.busy.segmenting : s.key === 'matting' ? t.busy.matting : t.busy.upscaling(s.done, s.total))
 
   const run = async (kind: StepKind, fn: () => Promise<Bitmap>) => {
     setBusy(t.busy.loading)
@@ -150,12 +157,24 @@ export default function App() {
     return () => window.removeEventListener('paste', onPaste)
   })
 
-  const loadBg = async () => {
-    const dtype = modelDtype(selectedBg, runtime!)
-    const device = modelDevice(selectedBg, runtime!)
-    setBusy(t.busy.preparing(selectedBg.name, device.toUpperCase(), dtype.toUpperCase()))
-    await engine.load('bg', selectedBg.id, selectedBg.revision, device, dtype, setProgress)
+  const loadBg = async (spec: ModelSpec = selectedBg) => {
+    const dtype = modelDtype(spec, runtime!)
+    const device = modelDevice(spec, runtime!)
+    setBusy(t.busy.preparing(spec.name, device.toUpperCase(), dtype.toUpperCase()))
+    await engine.load('bg', spec.id, spec.revision, device, dtype, setProgress)
     setProgress(null)
+  }
+
+  const retryWith = (id: string) => {
+    const spec = BG_MODELS.find((m) => m.id === id)
+    const base = active?.history.at(-2)?.bitmap
+    if (!spec || !base) return
+    setBgModel(id)
+    undo()
+    void run('bg', async () => {
+      await loadBg(spec)
+      return engine.removeBg(base, onStatus)
+    })
   }
 
   const removeBg = () => run('bg', async () => {
@@ -171,6 +190,15 @@ export default function App() {
       setBusy(null)
       setProgress(null)
     }
+  }
+
+  const helperDevice = () => (runtime?.device ?? 'wasm')
+  const samEmbed = async (image: Bitmap) => {
+    try { await engine.samEmbed(image, helperDevice(), setProgress, () => {}) } finally { setProgress(null) }
+  }
+  const samMask = (points: Point[]) => engine.samMask(points)
+  const matte = async (image: Bitmap) => {
+    try { return await engine.matte(image, helperDevice(), setProgress, () => {}) } finally { setProgress(null) }
   }
 
   const pendingBg = items.filter((i) => !inspectAlpha(i.history.at(-1)!.bitmap).transparent)
@@ -253,6 +281,14 @@ export default function App() {
   }
   if (current && Math.max(current.width, current.height) < 1024 && scale === 2) {
     suggestions.push({ id: 'upscale', label: t.tool.upscale(2), detail: selectedSr.name, icon: <Sparkles className="size-3.5" />, onClick: upscale })
+  }
+  const lastKind = active?.history.at(-1)?.kind
+  const bestId = BG_MODELS.find((m) => m.tier === 'best' && runtime && modelAvailable(m, runtime))?.id
+  if (current && lastKind === 'bg' && opaqueFraction > 0.6 && (selectedBg.tier === 'fast' || selectedBg.tier === 'balanced') && bestId) {
+    suggestions.push({ id: 'retry-best', label: t.quality.retryBest, detail: t.quality.retryBestDetail, icon: <Sparkles className="size-3.5" />, onClick: () => retryWith(bestId), primary: true })
+  }
+  if (current && (lastKind === 'bg' || !transparent)) {
+    suggestions.push({ id: 'pick-object', label: t.quality.pickObject, detail: t.quality.pickObjectDetail, icon: <MousePointerClick className="size-3.5" />, onClick: () => setRetouching('select') })
   }
   if (current && trimmable) {
     suggestions.push({ id: 'trim', label: t.tool.trim, detail: t.tool.trimDetail, icon: <Scissors className="size-3.5" />, onClick: () => push(trimTransparent(current), 'trim') })
@@ -399,8 +435,8 @@ export default function App() {
                     <span className="font-mono text-[10px] text-fg/80">{t.hero.local}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 py-3">
-                    <span className="text-muted">{t.hero.recommended}</span>
-                    <span className="flex items-center gap-1.5 font-medium">{selectedBg.name}<ArrowRight className="size-3.5 text-accent" /></span>
+                    <span className="text-muted">{t.quality.label}</span>
+                    <QualityChip value={selectedBg} runtime={runtime ?? NO_RUNTIME} onChange={setBgModel} compact />
                   </div>
                 </div>
               </section>
@@ -415,12 +451,13 @@ export default function App() {
           <>
             <ImageQueue items={items.map((i) => ({ id: i.id, name: i.name, thumbnail: i.thumbnail, steps: i.history.length }))} activeId={activeId} disabled={!!busy} max={MAX_IMAGES} onSelect={setActiveId} onRemove={remove} onFiles={addFiles} pendingBg={pendingBg.length} onRemoveAllBg={removeBgAll} onZip={downloadAll} />
 
-            <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-2 sm:px-3 md:flex-nowrap md:overflow-x-auto" role="toolbar" aria-label={t.appName}>
+            <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-2 sm:px-3" role="toolbar" aria-label={t.appName}>
               <Tool label={t.tool.cropHint} onClick={() => setCropSrc(toDataUrl(current!))} disabled={disabled} icon={<Crop className="size-4" />} text={t.tool.crop} />
               <Tool label={t.tool.removeBgHint(selectedBg.name)} onClick={removeBg} disabled={disabled} icon={<Eraser className="size-4" />} text={t.tool.removeBg} primary />
+              <QualityChip value={selectedBg} runtime={runtime ?? NO_RUNTIME} onChange={setBgModel} compact />
               <Tool label={t.tool.upscaleHint(scale, selectedSr.name)} onClick={upscale} disabled={disabled} icon={<Sparkles className="size-4" />} text={t.tool.upscale(scale)} />
               <Tool label={t.tool.trimHint} onClick={() => push(trimTransparent(current!), 'trim')} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
-              <Tool label={t.retouch.hint} onClick={() => setRetouching(true)} disabled={disabled} icon={<Paintbrush className="size-4" />} text={t.retouch.title} />
+              <Tool label={t.retouch.hint} onClick={() => setRetouching('erase')} disabled={disabled} icon={<Paintbrush className="size-4" />} text={t.retouch.title} />
               <Popover placement="bottom-start" trigger={({ open }) => (
                 <Tooltip label={transparent ? t.frame.hint : t.frame.needsAlpha} placement="bottom">
                   <button type="button" disabled={disabled || !transparent} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition disabled:opacity-40 ${open ? 'bg-line' : 'hover:bg-line'}`}>
@@ -483,6 +520,13 @@ export default function App() {
             </div>
 
             <SuggestedActions actions={suggestions} disabled={disabled} />
+            {!tipSeen && lastKind === 'bg' && (
+              <div role="note" className="flex items-center gap-3 border-b border-accent/30 bg-accent/8 px-4 py-2 text-xs text-fg">
+                <Sparkles className="size-4 shrink-0 text-accent" />
+                <span className="flex-1">{t.quality.tip}</span>
+                <button type="button" onClick={() => { setTipSeen(true); try { localStorage.setItem('tipSeen', '1') } catch { /* private mode */ } }} className="flex items-center gap-1 rounded-md px-2 py-1 font-semibold text-accent hover:bg-line">{t.quality.gotIt}<X className="size-3.5" /></button>
+              </div>
+            )}
 
             <div className={`relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 [container-type:size] ${preview === 'checker' ? 'checker' : ''}`} style={preview === 'checker' ? undefined : { background: preview }}>
               {current && (compare && before ? <CompareView key={active.id + active.history.length} before={before} after={current} /> : <PreviewCanvas key={active.id + active.history.length} bitmap={current} label={t.preview(active.name)} />)}
@@ -530,7 +574,7 @@ export default function App() {
       </main>
 
       {cropSrc && <CropDialog src={cropSrc} onCancel={() => setCropSrc(null)} onApply={applyCrop} />}
-      {retouching && current && <MaskEditor bitmap={current} source={blurSource} onCancel={() => setRetouching(false)} onApply={(b) => { setRetouching(false); push(b, 'retouch') }} onDetect={detectInArea} />}
+      {retouching && current && <MaskEditor bitmap={current} source={blurSource} initialMode={retouching === 'erase' && !transparent ? 'select' : retouching} onCancel={() => setRetouching(null)} onApply={(b) => { setRetouching(null); push(b, 'retouch') }} onDetect={detectInArea} onSamEmbed={samEmbed} onSamMask={samMask} onMatte={matte} />}
     </div>
   )
 }
