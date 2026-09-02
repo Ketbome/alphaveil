@@ -82,6 +82,11 @@ export const fr: Dict = {
     size: 'Pinceau',
     softness: 'Douceur',
     apply: 'Appliquer la retouche',
+    detect: 'IA dans la zone',
+    detectHint: "Peignez une zone puis lancez le modèle uniquement là. Le reste de l'image n'est pas touché.",
+    run: 'Détourer ici',
+    running: 'Détection…',
+    clear: 'Effacer la zone',
   },
   showcase: {
     label: 'Résultats obtenus avec Alphaveil',

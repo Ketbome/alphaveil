@@ -82,6 +82,11 @@ export const pt: Dict = {
     size: 'Pincel',
     softness: 'Suavidade',
     apply: 'Aplicar retoque',
+    detect: 'IA na área',
+    detectHint: 'Pinte uma área e execute o modelo só ali. O resto da imagem não é alterado.',
+    run: 'Remover fundo aqui',
+    running: 'Detectando…',
+    clear: 'Limpar área',
   },
   showcase: {
     label: 'Resultados feitos com Alphaveil',

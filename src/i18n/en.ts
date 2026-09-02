@@ -80,6 +80,11 @@ export const en = {
     size: 'Brush',
     softness: 'Softness',
     apply: 'Apply retouch',
+    detect: 'AI in area',
+    detectHint: 'Paint an area, then run the model only there. The rest of the image is untouched.',
+    run: 'Remove background here',
+    running: 'Detecting…',
+    clear: 'Clear area',
   },
   showcase: {
     label: 'Results made with Alphaveil',

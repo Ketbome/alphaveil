@@ -163,6 +163,16 @@ export default function App() {
     return engine.removeBg(current!, onStatus)
   })
 
+  const detectInArea = async (crop: Bitmap) => {
+    try {
+      await loadBg()
+      return await engine.removeBg(crop, () => {})
+    } finally {
+      setBusy(null)
+      setProgress(null)
+    }
+  }
+
   const pendingBg = items.filter((i) => !inspectAlpha(i.history.at(-1)!.bitmap).transparent)
   const removeBgAll = async () => {
     setError(null)
@@ -410,7 +420,7 @@ export default function App() {
               <Tool label={t.tool.removeBgHint(selectedBg.name)} onClick={removeBg} disabled={disabled} icon={<Eraser className="size-4" />} text={t.tool.removeBg} primary />
               <Tool label={t.tool.upscaleHint(scale, selectedSr.name)} onClick={upscale} disabled={disabled} icon={<Sparkles className="size-4" />} text={t.tool.upscale(scale)} />
               <Tool label={t.tool.trimHint} onClick={() => push(trimTransparent(current!), 'trim')} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
-              <Tool label={transparent ? t.retouch.hint : t.frame.needsAlpha} onClick={() => setRetouching(true)} disabled={disabled || !transparent} icon={<Paintbrush className="size-4" />} text={t.retouch.title} />
+              <Tool label={t.retouch.hint} onClick={() => setRetouching(true)} disabled={disabled} icon={<Paintbrush className="size-4" />} text={t.retouch.title} />
               <Popover placement="bottom-start" trigger={({ open }) => (
                 <Tooltip label={transparent ? t.frame.hint : t.frame.needsAlpha} placement="bottom">
                   <button type="button" disabled={disabled || !transparent} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition disabled:opacity-40 ${open ? 'bg-line' : 'hover:bg-line'}`}>
@@ -520,7 +530,7 @@ export default function App() {
       </main>
 
       {cropSrc && <CropDialog src={cropSrc} onCancel={() => setCropSrc(null)} onApply={applyCrop} />}
-      {retouching && current && <MaskEditor bitmap={current} source={blurSource} onCancel={() => setRetouching(false)} onApply={(b) => { setRetouching(false); push(b, 'retouch') }} />}
+      {retouching && current && <MaskEditor bitmap={current} source={blurSource} onCancel={() => setRetouching(false)} onApply={(b) => { setRetouching(false); push(b, 'retouch') }} onDetect={detectInArea} />}
     </div>
   )
 }

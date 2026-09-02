@@ -19,7 +19,7 @@ export function toCanvas(bmp: Bitmap) {
   const canvas = document.createElement('canvas')
   canvas.width = bmp.width
   canvas.height = bmp.height
-  canvas.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(bmp.data), bmp.width, bmp.height), 0, 0)
+  canvas.getContext('2d', { willReadFrequently: true })!.putImageData(new ImageData(new Uint8ClampedArray(bmp.data), bmp.width, bmp.height), 0, 0)
   return canvas
 }
 

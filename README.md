@@ -12,7 +12,7 @@ Live: https://ketbome.github.io/alphaveil/
 - **AI upscale** — Swin2SR ×2 (lightweight) or ×4 (real-world, JPEG-artifact aware), tiled to keep GPU memory bounded. Alpha is preserved.
 - **Export** — PNG / WebP with transparency, or JPG with a solid background; preview on checkerboard or any color.
 - **Frame subject** — after removing the background, crop around the detected subject in 1:1, 4:5, 3:4, 9:16, 16:9 or tight.
-- **Retouch mask** — brush to erase leftover background or restore parts of the subject from the original photo, with softness, zoom and undo.
+- **Retouch mask** — brush to erase leftover background, restore parts of the subject from the original photo, or **paint an area and run the model only there** (the crop is segmented at full model resolution and blended back with the brush's soft edge). Softness, zoom and undo.
 - **Backdrop** — bake a solid color or a blurred copy of the original photo behind the subject, with an optional soft shadow.
 - **Batch** — remove the background of every open image in one go and download everything as a ZIP.
 - **Size cap** — export JPG / WebP under 200 KB, 500 KB or 1 MB (quality is searched automatically).
