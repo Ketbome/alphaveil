@@ -4,7 +4,7 @@ Client-side image tool: background removal, crop, AI upscale. Everything runs in
 
 ## Stack
 
-Vite 8, React 19, TypeScript, Tailwind 4 (`@tailwindcss/vite`, theme tokens in `src/index.css`), `@huggingface/transformers` v4 (WebGPU / WASM), `@floating-ui/react`, `react-easy-crop`, `lucide-react`.
+Vite 8, React 19, TypeScript, Tailwind 4 (`@tailwindcss/vite`, theme tokens in `src/index.css`), `@huggingface/transformers` v4 (WebGPU / WASM), `@floating-ui/react`, `react-easy-crop`, `lucide-react`, `fflate` (ZIP export), `vite-plugin-pwa`.
 
 ## Commands
 
@@ -17,14 +17,16 @@ Vite 8, React 19, TypeScript, Tailwind 4 (`@tailwindcss/vite`, theme tokens in `
 - `src/lib/worker.ts` — Web Worker: loads models, runs background removal (AutoModel + AutoProcessor, not the pipeline registry) and tiled Swin2SR upscaling.
 - `src/lib/engine.ts` — promise-based client for the worker (progress/status callbacks).
 - `src/lib/models.ts` — model catalog (ids, dtypes per device, sizes, licenses).
-- `src/lib/image.ts` — canvas helpers: file → bitmap, crop, trim, export.
+- `src/lib/image.ts` — canvas helpers: file → bitmap, crop, trim, `smartCrop` (frame the subject), `composeBackdrop` (color / blurred photo + shadow), `exportBlob` with optional byte cap.
+- `src/lib/install.ts` — `beforeinstallprompt` hook for the PWA install button; `vite-plugin-pwa` (config in `vite.config.ts`) emits the manifest and a precaching service worker. Icons: `public/icon-192.png`, `public/icon-512.png`.
 - `src/i18n/` — `en.ts` is the typed base dictionary (`Dict`); `es`, `pt`, `fr` must match it. `index.tsx` has the provider, `useI18n()`, URL-prefix detection (`/es/` wins over saved/browser language) and rewrites the URL on switch without reloading.
 - `scripts/localize-pages.ts` — post-build: localized static copies of `index.html` per language and `sitemap.xml` (do not add a static sitemap to `public/`).
 - `src/lib/theme.ts` — light / dark / system, stored in `localStorage`, applied as `data-theme` on `<html>`.
 - `src/components/` — `Tooltip` / `Popover` (Floating UI), `Dropzone`, `ImageQueue`, `CropDialog`, `ModelPicker`, `RuntimeStatus`, `SuggestedActions`, `CompareView`, `Showcase`.
 - `public/showcase/*.webp` — real cutouts produced by the app (trimmed, ≤900 px, alpha). `Showcase` floats them around the upload card on desktop and as a strip on mobile; prompts to regenerate sources live in `docs/asset-prompts.md`.
 - `src/lib/history.ts` — `Step { bitmap, kind }` and `compareBase()`: the before/after curtain compares against the latest framing step (source, crop or trim), never across a crop.
-- `src/App.tsx` — image queue (max 8, one active, 6-step history each), toolbar, export.
+- `src/App.tsx` — image queue (max 8, one active, 6-step history each), toolbar, export, batch (`removeBgAll`, `downloadAll`).
+- Background model order in `models.ts` is the default order: RMBG 1.4 first (best general cutouts), MODNet last as the light fallback. Keep it that way unless the user asks.
 
 ## Conventions
 

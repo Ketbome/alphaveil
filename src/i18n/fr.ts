@@ -45,6 +45,33 @@ export const fr: Dict = {
     download: 'Télécharger',
   },
   suggested: 'Suggéré',
+  frame: {
+    title: 'Cadrer le sujet',
+    hint: 'Recadrer autour du sujet détecté',
+    free: 'Serré',
+    needsAlpha: "Supprimez d'abord l'arrière-plan pour détecter le sujet",
+  },
+  backdrop: {
+    title: 'Arrière-plan',
+    hint: 'Placer une couleur ou une copie floutée de la photo derrière le sujet',
+    color: 'Couleur unie',
+    blur: 'Photo floutée',
+    blurAmount: 'Flou',
+    shadow: 'Ombre douce',
+    apply: "Appliquer l'arrière-plan",
+  },
+  batch: {
+    removeAll: 'Tout détourer',
+    removeAllHint: (n) => `Supprimer l'arrière-plan de ${n} images`,
+    zip: 'ZIP',
+    zipHint: (n) => `Télécharger ${n} images en ZIP`,
+    progress: (i, n) => `Image ${i} sur ${n}`,
+  },
+  install: {
+    button: "Installer l'app",
+    hint: "Installez Alphaveil comme application. Une fois les modèles en cache, elle fonctionne hors ligne.",
+    ios: "Sur iPhone ou iPad : Partager → Sur l'écran d'accueil.",
+  },
   showcase: {
     label: 'Résultats obtenus avec Alphaveil',
     alt: (model) => `Détourage produit localement avec ${model}`,
@@ -59,6 +86,8 @@ export const fr: Dict = {
     quality: (pct) => `Qualité ${pct}%`,
     background: "Fond de l'aperçu / export",
     checker: 'Damier',
+    maxSize: 'Poids maximum',
+    noLimit: 'Sans limite',
   },
   runtime: {
     detecting: 'Détection',

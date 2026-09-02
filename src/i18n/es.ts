@@ -45,6 +45,33 @@ export const es: Dict = {
     download: 'Descargar',
   },
   suggested: 'Sugerido',
+  frame: {
+    title: 'Encuadrar sujeto',
+    hint: 'Recortar alrededor del sujeto detectado',
+    free: 'Ajustado',
+    needsAlpha: 'Quita el fondo primero para poder detectar el sujeto',
+  },
+  backdrop: {
+    title: 'Fondo',
+    hint: 'Poner un color o una copia desenfocada de la foto detrás del sujeto',
+    color: 'Color sólido',
+    blur: 'Foto desenfocada',
+    blurAmount: 'Desenfoque',
+    shadow: 'Sombra suave',
+    apply: 'Aplicar fondo',
+  },
+  batch: {
+    removeAll: 'Quitar a todas',
+    removeAllHint: (n) => `Quitar el fondo de ${n} imágenes`,
+    zip: 'ZIP',
+    zipHint: (n) => `Descargar ${n} imágenes en un ZIP`,
+    progress: (i, n) => `Imagen ${i} de ${n}`,
+  },
+  install: {
+    button: 'Instalar app',
+    hint: 'Instala Alphaveil como aplicación. Con los modelos en caché funciona sin conexión.',
+    ios: 'En iPhone o iPad: Compartir → Añadir a pantalla de inicio.',
+  },
   showcase: {
     label: 'Resultados hechos con Alphaveil',
     alt: (model) => `Recorte generado localmente con ${model}`,
@@ -59,6 +86,8 @@ export const es: Dict = {
     quality: (pct) => `Calidad ${pct}%`,
     background: 'Fondo de vista previa / exportación',
     checker: 'Cuadrícula',
+    maxSize: 'Peso máximo',
+    noLimit: 'Sin límite',
   },
   runtime: {
     detecting: 'Detectando',

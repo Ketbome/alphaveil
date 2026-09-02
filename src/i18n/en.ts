@@ -43,6 +43,33 @@ export const en = {
     download: 'Download',
   },
   suggested: 'Suggested',
+  frame: {
+    title: 'Frame subject',
+    hint: 'Crop around the detected subject',
+    free: 'Tight',
+    needsAlpha: 'Remove the background first so the subject can be detected',
+  },
+  backdrop: {
+    title: 'Background',
+    hint: 'Put a color or a blurred copy of the photo behind the subject',
+    color: 'Solid color',
+    blur: 'Blurred photo',
+    blurAmount: 'Blur',
+    shadow: 'Soft shadow',
+    apply: 'Apply background',
+  },
+  batch: {
+    removeAll: 'Remove all',
+    removeAllHint: (n: number) => `Remove the background of ${n} images`,
+    zip: 'ZIP',
+    zipHint: (n: number) => `Download ${n} images as a ZIP`,
+    progress: (i: number, n: number) => `Image ${i} of ${n}`,
+  },
+  install: {
+    button: 'Install app',
+    hint: 'Install Alphaveil as an app. Once the models are cached it works offline.',
+    ios: 'On iPhone or iPad: Share → Add to Home Screen.',
+  },
   showcase: {
     label: 'Results made with Alphaveil',
     alt: (model: string) => `Cutout produced locally with ${model}`,
@@ -57,6 +84,8 @@ export const en = {
     quality: (pct: number) => `Quality ${pct}%`,
     background: 'Preview / export background',
     checker: 'Checkerboard',
+    maxSize: 'Max file size',
+    noLimit: 'No limit',
   },
   runtime: {
     detecting: 'Detecting',

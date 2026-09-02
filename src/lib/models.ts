@@ -20,14 +20,6 @@ export interface ModelSpec {
 
 export const BG_MODELS: ModelSpec[] = [
   {
-    id: 'Xenova/modnet',
-    revision: 'fa2fa546052fba4c08921230a26cc69a333fca12',
-    name: 'MODNet',
-    license: 'Apache 2.0',
-    size: { fp16: '13 MB', fp32: '26 MB', q8: '6.3 MB' },
-    dtype: { webgpu: 'fp16', wasm: 'q8' },
-  },
-  {
     id: 'briaai/RMBG-1.4',
     revision: '2ceba5a5efaec153162aedea169f76caf9b46cf8',
     name: 'RMBG 1.4',
@@ -54,6 +46,14 @@ export const BG_MODELS: ModelSpec[] = [
     dtype: { webgpu: 'fp16', wasm: 'fp32' },
     minStorageBuffers: 11,
     wasmSafe: false,
+  },
+  {
+    id: 'Xenova/modnet',
+    revision: 'fa2fa546052fba4c08921230a26cc69a333fca12',
+    name: 'MODNet',
+    license: 'Apache 2.0',
+    size: { fp16: '13 MB', fp32: '26 MB', q8: '6.3 MB' },
+    dtype: { webgpu: 'fp16', wasm: 'q8' },
   },
 ]
 

@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  ArrowRight, Code2, Columns2, Crop, Plus, Download, Eraser, HardDrive, Languages, Loader2, LockKeyhole, Monitor, Moon, Scissors, Settings2, Sparkles, Sun, Trash2, Undo2,
+  ArrowRight, Code2, Columns2, Crop, Focus, MonitorDown, PaintBucket, Plus, Download, Eraser, HardDrive, Languages, Loader2, LockKeyhole, Monitor, Moon, Scissors, Settings2, Sparkles, Sun, Trash2, Undo2,
 } from 'lucide-react'
 import type { Area } from 'react-easy-crop'
 import { engine, type Progress } from './lib/engine'
 import type { Bitmap, Status } from './lib/worker'
 import { BG_MODELS, NO_RUNTIME, SR_MODELS, SR_SCALE, modelAvailable, modelDevice, modelDtype, type ModelSpec, type Runtime } from './lib/models'
-import { cropBitmap, download, exportBlob, fileToBitmap, formatBytes, inspectAlpha, toDataUrl, toThumbnailDataUrl, trimTransparent } from './lib/image'
+import { composeBackdrop, cropBitmap, download, exportBlob, fileToBitmap, formatBytes, inspectAlpha, smartCrop, toDataUrl, toThumbnailDataUrl, trimTransparent } from './lib/image'
+import { zipSync } from 'fflate'
 import { useTheme, type Theme } from './lib/theme'
-import { compareBase, type Step, type StepKind } from './lib/history'
+import { compareBase, lastOpaque, type Step, type StepKind } from './lib/history'
+import { useInstallPrompt } from './lib/install'
 import { LANGS, useI18n, type Lang } from './i18n'
 import { Dropzone } from './components/Dropzone'
 import { CropDialog } from './components/CropDialog'
@@ -59,11 +61,15 @@ export default function App() {
   const [preview, setPreview] = useState<string>('checker')
   const [format, setFormat] = useState<Format>('png')
   const [quality, setQuality] = useState(0.92)
+  const [maxBytes, setMaxBytes] = useState<number | null>(null)
+  const [backdrop, setBackdrop] = useState<{ mode: 'color' | 'blur'; color: string; blur: number; shadow: boolean }>({ mode: 'color', color: '#f3efe6', blur: 24, shadow: true })
 
   const addInput = useRef<HTMLInputElement>(null)
   const active = items.find((i) => i.id === activeId) ?? null
   const current = active?.history.at(-1)?.bitmap ?? null
   const before = active ? compareBase(active.history) : null
+  const blurSource = active ? lastOpaque(active.history, (b) => !inspectAlpha(b).transparent) : null
+  const install = useInstallPrompt()
   const canCompare = !!before
   const { transparent, trimmable } = useMemo(() => (current ? inspectAlpha(current) : { transparent: false, trimmable: false }), [current])
   const requestedBg = BG_MODELS.find((model) => model.id === bgModel) ?? BG_MODELS[0]
@@ -80,9 +86,10 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('bgModel', selectedBg.id) } catch { /* private mode */ } }, [selectedBg.id])
   useEffect(() => { try { localStorage.setItem('srModel', srModel) } catch { /* private mode */ } }, [srModel])
 
-  const push = (b: Bitmap, kind: StepKind) => {
-    setItems((list) => list.map((i) => (i.id !== activeId ? i : { ...i, history: [...i.history, { bitmap: b, kind }].slice(-MAX_HISTORY), thumbnail: toThumbnailDataUrl(b) })))
+  const pushTo = (id: string | null, b: Bitmap, kind: StepKind) => {
+    setItems((list) => list.map((i) => (i.id !== id ? i : { ...i, history: [...i.history, { bitmap: b, kind }].slice(-MAX_HISTORY), thumbnail: toThumbnailDataUrl(b) })))
   }
+  const push = (b: Bitmap, kind: StepKind) => pushTo(activeId, b, kind)
   const undo = () => {
     setItems((list) => list.map((i) => {
       if (i.id !== activeId || i.history.length < 2) return i
@@ -141,14 +148,67 @@ export default function App() {
     return () => window.removeEventListener('paste', onPaste)
   })
 
-  const removeBg = () => run('bg', async () => {
+  const loadBg = async () => {
     const dtype = modelDtype(selectedBg, runtime!)
     const device = modelDevice(selectedBg, runtime!)
     setBusy(t.busy.preparing(selectedBg.name, device.toUpperCase(), dtype.toUpperCase()))
     await engine.load('bg', selectedBg.id, selectedBg.revision, device, dtype, setProgress)
     setProgress(null)
+  }
+
+  const removeBg = () => run('bg', async () => {
+    await loadBg()
     return engine.removeBg(current!, onStatus)
   })
+
+  const pendingBg = items.filter((i) => !inspectAlpha(i.history.at(-1)!.bitmap).transparent)
+  const removeBgAll = async () => {
+    setError(null)
+    setBusy(t.busy.loading)
+    try {
+      await loadBg()
+      for (const [n, item] of pendingBg.entries()) {
+        setActiveId(item.id)
+        setBusy(t.batch.progress(n + 1, pendingBg.length))
+        const out = await engine.removeBg(item.history.at(-1)!.bitmap, () => {})
+        pushTo(item.id, out, 'bg')
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null)
+      setProgress(null)
+    }
+  }
+
+  const exportOpts = () => ({ format, quality, maxBytes, background: format === 'jpeg' ? '#ffffff' : preview === 'checker' ? null : preview })
+  const ext = format === 'jpeg' ? 'jpg' : format
+
+  const downloadAll = async () => {
+    setBusy(t.batch.progress(0, items.length))
+    try {
+      const files: Record<string, Uint8Array> = {}
+      for (const [n, item] of items.entries()) {
+        setBusy(t.batch.progress(n + 1, items.length))
+        const blob = await exportBlob(item.history.at(-1)!.bitmap, exportOpts())
+        files[`${item.name}-alphaveil.${ext}`] = new Uint8Array(await blob.arrayBuffer())
+      }
+      download(new Blob([zipSync(files, { level: 0 }) as BlobPart], { type: 'application/zip' }), 'alphaveil.zip')
+    } catch {
+      setError(t.errors.export)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const frameTo = (aspect: number | null) => {
+    const r = smartCrop(current!, aspect)
+    if (r) push(cropBitmap(current!, r.x, r.y, r.width, r.height), 'crop')
+  }
+
+  const applyBackdrop = () => {
+    push(composeBackdrop(current!, { ...backdrop, source: blurSource }), 'compose')
+  }
 
   const upscale = () => run('upscale', async () => {
     const dtype = modelDtype(selectedSr, runtime!)
@@ -166,9 +226,8 @@ export default function App() {
 
   const save = async () => {
     try {
-      const bg = format === 'jpeg' ? '#ffffff' : preview === 'checker' ? null : preview
-      const blob = await exportBlob(current!, { format, background: bg, quality })
-      download(blob, `${active!.name}-alphaveil.${format === 'jpeg' ? 'jpg' : format}`)
+      const blob = await exportBlob(current!, exportOpts())
+      download(blob, `${active!.name}-alphaveil.${ext}`)
     } catch {
       setError(t.errors.export)
     }
@@ -206,6 +265,17 @@ export default function App() {
                 <input type="range" min={0.5} max={1} step={0.01} value={quality} onChange={(e) => setQuality(Number(e.target.value))} className="mt-1 w-full accent-accent-solid" />
               </label>
             )}
+            {format !== 'png' && (
+              <label className="block">
+                <span className="text-xs text-muted">{t.exportOpts.maxSize}</span>
+                <select value={maxBytes ?? ''} onChange={(e) => setMaxBytes(e.target.value ? Number(e.target.value) : null)} className="mt-1 w-full rounded-md border border-line bg-ink px-2 py-1.5">
+                  <option value="">{t.exportOpts.noLimit}</option>
+                  <option value={200 * 1024}>200 KB</option>
+                  <option value={500 * 1024}>500 KB</option>
+                  <option value={1024 * 1024}>1 MB</option>
+                </select>
+              </label>
+            )}
             <div>
               <span className="text-xs text-muted">{t.exportOpts.background}</span>
               <div className="mt-1 flex gap-1.5" role="radiogroup" aria-label={t.exportOpts.background}>
@@ -233,6 +303,22 @@ export default function App() {
         </div>
         <div className="flex items-center gap-0.5 sm:gap-1.5">
           <span className="hidden sm:inline-flex"><RuntimeStatus runtime={runtime} dtype={bgDtype} device={bgDevice} /></span>
+          {install.available && (
+            <Popover trigger={() => (
+              <Tooltip label={t.install.button}><button type="button" className="rounded-md p-1.5 text-accent hover:bg-line" aria-label={t.install.button}><MonitorDown className="size-5" /></button></Tooltip>
+            )}>
+              {(close) => (
+                <div className="w-64 space-y-3 text-sm">
+                  <p className="text-xs leading-snug text-muted">{t.install.hint}</p>
+                  {install.canPrompt ? (
+                    <button type="button" onClick={() => { install.prompt(); close() }} className="w-full rounded-lg bg-accent-solid px-3 py-2 text-sm font-semibold text-on-accent hover:brightness-110">{t.install.button}</button>
+                  ) : (
+                    <p className="text-xs leading-snug">{t.install.ios}</p>
+                  )}
+                </div>
+              )}
+            </Popover>
+          )}
           <Popover trigger={() => (
             <Tooltip label={t.language}><button type="button" className="rounded-md p-1.5 hover:bg-line" aria-label={t.language}><Languages className="size-5" /></button></Tooltip>
           )}>
@@ -315,13 +401,62 @@ export default function App() {
           </div>
         ) : (
           <>
-            <ImageQueue items={items.map((i) => ({ id: i.id, name: i.name, thumbnail: i.thumbnail, steps: i.history.length }))} activeId={activeId} disabled={!!busy} max={MAX_IMAGES} onSelect={setActiveId} onRemove={remove} onFiles={addFiles} />
+            <ImageQueue items={items.map((i) => ({ id: i.id, name: i.name, thumbnail: i.thumbnail, steps: i.history.length }))} activeId={activeId} disabled={!!busy} max={MAX_IMAGES} onSelect={setActiveId} onRemove={remove} onFiles={addFiles} pendingBg={pendingBg.length} onRemoveAllBg={removeBgAll} onZip={downloadAll} />
 
             <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-2 sm:px-3 md:flex-nowrap md:overflow-x-auto" role="toolbar" aria-label={t.appName}>
               <Tool label={t.tool.cropHint} onClick={() => setCropSrc(toDataUrl(current!))} disabled={disabled} icon={<Crop className="size-4" />} text={t.tool.crop} />
               <Tool label={t.tool.removeBgHint(selectedBg.name)} onClick={removeBg} disabled={disabled} icon={<Eraser className="size-4" />} text={t.tool.removeBg} primary />
               <Tool label={t.tool.upscaleHint(scale, selectedSr.name)} onClick={upscale} disabled={disabled} icon={<Sparkles className="size-4" />} text={t.tool.upscale(scale)} />
               <Tool label={t.tool.trimHint} onClick={() => push(trimTransparent(current!), 'trim')} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
+              <Popover placement="bottom-start" trigger={({ open }) => (
+                <Tooltip label={transparent ? t.frame.hint : t.frame.needsAlpha} placement="bottom">
+                  <button type="button" disabled={disabled || !transparent} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition disabled:opacity-40 ${open ? 'bg-line' : 'hover:bg-line'}`}>
+                    <Focus className="size-4" />{t.frame.title}
+                  </button>
+                </Tooltip>
+              )}>
+                {(close) => (
+                  <div className="grid w-44 grid-cols-2 gap-1">
+                    {([['free', null], ['1:1', 1], ['4:5', 4 / 5], ['3:4', 3 / 4], ['9:16', 9 / 16], ['16:9', 16 / 9]] as [string, number | null][]).map(([label, aspect]) => (
+                      <button key={label} type="button" onClick={() => { frameTo(aspect); close() }} className="rounded-md border border-line px-2 py-1.5 text-xs hover:border-accent hover:text-accent">
+                        {label === 'free' ? t.frame.free : label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </Popover>
+              <Popover placement="bottom-start" trigger={({ open }) => (
+                <Tooltip label={transparent ? t.backdrop.hint : t.frame.needsAlpha} placement="bottom">
+                  <button type="button" disabled={disabled || !transparent} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition disabled:opacity-40 ${open ? 'bg-line' : 'hover:bg-line'}`}>
+                    <PaintBucket className="size-4" />{t.backdrop.title}
+                  </button>
+                </Tooltip>
+              )}>
+                {(close) => (
+                  <div className="w-64 space-y-3 text-sm">
+                    <div className="grid grid-cols-2 gap-1" role="radiogroup">
+                      <button type="button" role="radio" aria-checked={backdrop.mode === 'color'} onClick={() => setBackdrop({ ...backdrop, mode: 'color' })} className={`rounded-md border px-2 py-1.5 text-xs ${backdrop.mode === 'color' ? 'border-accent text-accent' : 'border-line'}`}>{t.backdrop.color}</button>
+                      <button type="button" role="radio" aria-checked={backdrop.mode === 'blur'} disabled={!blurSource} onClick={() => setBackdrop({ ...backdrop, mode: 'blur' })} className={`rounded-md border px-2 py-1.5 text-xs disabled:opacity-40 ${backdrop.mode === 'blur' ? 'border-accent text-accent' : 'border-line'}`}>{t.backdrop.blur}</button>
+                    </div>
+                    {backdrop.mode === 'color' ? (
+                      <label className="flex items-center justify-between gap-3">
+                        <span className="text-xs text-muted">{t.backdrop.color}</span>
+                        <input type="color" value={backdrop.color} onChange={(e) => setBackdrop({ ...backdrop, color: e.target.value })} className="size-8 cursor-pointer rounded-md border-2 border-line bg-transparent" />
+                      </label>
+                    ) : (
+                      <label className="block">
+                        <span className="text-xs text-muted">{t.backdrop.blurAmount} {backdrop.blur}</span>
+                        <input type="range" min={4} max={60} value={backdrop.blur} onChange={(e) => setBackdrop({ ...backdrop, blur: Number(e.target.value) })} className="mt-1 w-full accent-accent-solid" />
+                      </label>
+                    )}
+                    <label className="flex items-center gap-2 text-xs text-muted">
+                      <input type="checkbox" checked={backdrop.shadow} onChange={(e) => setBackdrop({ ...backdrop, shadow: e.target.checked })} className="accent-accent-solid" />
+                      {t.backdrop.shadow}
+                    </label>
+                    <button type="button" onClick={() => { applyBackdrop(); close() }} className="w-full rounded-lg bg-accent-solid px-3 py-2 text-sm font-semibold text-on-accent hover:brightness-110">{t.backdrop.apply}</button>
+                  </div>
+                )}
+              </Popover>
               <span className="mx-1 hidden h-5 w-px bg-line md:inline" />
               <Tool label={t.compare.hint} onClick={() => setCompare((v) => !v)} disabled={!canCompare || !!busy} icon={<Columns2 className="size-4" />} text={t.compare.toggle} active={compare && canCompare} />
               <Tool label={t.tool.undo} onClick={undo} disabled={(active.history.length ?? 0) < 2 || !!busy} icon={<Undo2 className="size-4" />} />

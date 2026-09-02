@@ -1,4 +1,4 @@
-import { Check, Plus, X } from 'lucide-react'
+import { Archive, Check, Layers, Plus, X } from 'lucide-react'
 import { useRef } from 'react'
 import { useI18n } from '../i18n'
 import { Tooltip } from './Tooltip'
@@ -18,11 +18,14 @@ interface Props {
   onSelect: (id: string) => void
   onRemove: (id: string) => void
   onFiles: (files: File[]) => void
+  pendingBg: number
+  onRemoveAllBg: () => void
+  onZip: () => void
 }
 
 const TILT = ['-rotate-6', 'rotate-3', '-rotate-3', 'rotate-6']
 
-export function ImageQueue({ items, activeId, disabled, max, onSelect, onRemove, onFiles }: Props) {
+export function ImageQueue({ items, activeId, disabled, max, onSelect, onRemove, onFiles, pendingBg, onRemoveAllBg, onZip }: Props) {
   const { t } = useI18n()
   const input = useRef<HTMLInputElement>(null)
   const atLimit = items.length >= max
@@ -75,6 +78,22 @@ export function ImageQueue({ items, activeId, disabled, max, onSelect, onRemove,
           <Plus className="size-6" />
         </button>
       </div>
+      {items.length > 1 && (
+        <div className="flex shrink-0 items-center gap-1">
+          <Tooltip label={t.batch.removeAllHint(pendingBg)} placement="bottom">
+            <button type="button" onClick={onRemoveAllBg} disabled={disabled || pendingBg === 0} aria-label={t.batch.removeAllHint(pendingBg)}
+              className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs font-semibold text-accent hover:bg-line disabled:opacity-40">
+              <Layers className="size-4" /><span className="hidden sm:inline">{t.batch.removeAll}</span>
+            </button>
+          </Tooltip>
+          <Tooltip label={t.batch.zipHint(items.length)} placement="bottom">
+            <button type="button" onClick={onZip} disabled={disabled} aria-label={t.batch.zipHint(items.length)}
+              className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs font-semibold hover:bg-line disabled:opacity-40">
+              <Archive className="size-4" /><span className="hidden sm:inline">{t.batch.zip}</span>
+            </button>
+          </Tooltip>
+        </div>
+      )}
       <span className="shrink-0 font-mono text-[10px] text-dim">{items.length}/{max}</span>
       <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) onFiles(Array.from(e.target.files)); e.target.value = '' }} />
     </section>
