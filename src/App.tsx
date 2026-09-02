@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  ArrowRight, Code2, Crop, Download, Eraser, HardDrive, Languages, Loader2, LockKeyhole, Monitor, Moon, Scissors, Settings2, Sparkles, Sun, Trash2, Undo2,
+  ArrowRight, Code2, Columns2, Crop, Download, Eraser, HardDrive, Languages, Loader2, LockKeyhole, Monitor, Moon, Scissors, Settings2, Sparkles, Sun, Trash2, Undo2,
 } from 'lucide-react'
 import type { Area } from 'react-easy-crop'
 import { engine, type Progress } from './lib/engine'
 import type { Bitmap, Status } from './lib/worker'
 import { BG_MODELS, NO_RUNTIME, SR_MODELS, SR_SCALE, modelAvailable, modelDevice, modelDtype, type ModelSpec, type Runtime } from './lib/models'
-import { cropBitmap, download, exportBlob, fileToBitmap, formatBytes, toDataUrl, toThumbnailDataUrl, trimTransparent } from './lib/image'
+import { cropBitmap, download, exportBlob, fileToBitmap, formatBytes, inspectAlpha, toDataUrl, toThumbnailDataUrl, trimTransparent } from './lib/image'
 import { useTheme, type Theme } from './lib/theme'
 import { LANGS, useI18n, type Lang } from './i18n'
 import { Dropzone } from './components/Dropzone'
@@ -17,6 +17,8 @@ import { ModelPicker } from './components/ModelPicker'
 import { RuntimeStatus } from './components/RuntimeStatus'
 import { ImageQueue } from './components/ImageQueue'
 import { SuggestedActions, type SuggestedAction } from './components/SuggestedActions'
+import { Logo } from './components/Logo'
+import { CompareView } from './components/CompareView'
 
 type Format = 'png' | 'jpeg' | 'webp'
 
@@ -51,12 +53,15 @@ export default function App() {
   const [progress, setProgress] = useState<Progress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cropSrc, setCropSrc] = useState<string | null>(null)
+  const [compare, setCompare] = useState(false)
   const [preview, setPreview] = useState<string>('checker')
   const [format, setFormat] = useState<Format>('png')
   const [quality, setQuality] = useState(0.92)
 
   const active = items.find((i) => i.id === activeId) ?? null
   const current = active?.history.at(-1) ?? null
+  const original = active?.history[0] ?? null
+  const canCompare = !!active && active.history.length > 1
   const { transparent, trimmable } = useMemo(() => (current ? inspectAlpha(current) : { transparent: false, trimmable: false }), [current])
   const requestedBg = BG_MODELS.find((model) => model.id === bgModel) ?? BG_MODELS[0]
   const selectedBg = runtime && !modelAvailable(requestedBg, runtime)
@@ -185,8 +190,8 @@ export default function App() {
     <div className="flex h-full flex-col">
       <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-line bg-ink/95 px-3 sm:px-4">
         <div className="flex items-center gap-2">
-          <span className="grid size-8 place-items-center rounded-lg bg-accent-solid font-black tracking-tighter text-on-accent">BG</span>
-          <span className="font-semibold tracking-tight">{t.appName}</span>
+          <Logo />
+          <span className="font-display text-[1.35rem] leading-none tracking-tight">{t.appName}</span>
           <span className="hidden border-l border-line pl-2 text-xs text-dim md:inline">{t.tagline}</span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -232,7 +237,7 @@ export default function App() {
               <p className="px-1 text-[11px] leading-snug text-dim">{t.models.note}</p>
             </div>
           </Popover>
-          <a href="https://github.com/ketbome/bg-studio" target="_blank" rel="noreferrer" className="rounded-md p-1.5 hover:bg-line" aria-label="GitHub">
+          <a href="https://github.com/ketbome/alphaveil" target="_blank" rel="noreferrer" className="rounded-md p-1.5 hover:bg-line" aria-label="GitHub">
             <Code2 className="size-5" />
           </a>
         </div>
@@ -244,12 +249,12 @@ export default function App() {
             <div className="workspace-grid pointer-events-none absolute inset-0" />
             <div className="relative mx-auto grid w-full max-w-6xl items-center gap-8 px-5 py-8 md:px-8 lg:grid-cols-[0.82fr_1.18fr] lg:gap-14 lg:py-10">
               <section className="max-w-lg">
-                <div className="mb-5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">{t.hero.kicker}</div>
-                <h1 className="max-w-md text-4xl font-semibold leading-[0.95] tracking-[-0.055em] sm:text-5xl lg:text-6xl">
-                  {t.hero.title1}<br /><span className="text-dim">{t.hero.title2}</span>
+                <div className="rise mb-5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">{t.hero.kicker}</div>
+                <h1 className="rise max-w-md font-display text-5xl leading-[0.92] tracking-[-0.02em] sm:text-6xl lg:text-7xl">
+                  {t.hero.title1}<br /><span className="italic text-accent">{t.hero.title2}</span>
                 </h1>
-                <p className="mt-5 max-w-md text-sm leading-relaxed text-muted sm:text-base">{t.hero.body}</p>
-                <div className="mt-7 flex max-w-md flex-col divide-y divide-line border-y border-line text-xs">
+                <p className="rise mt-5 max-w-md text-sm leading-relaxed text-muted sm:text-base" style={{ animationDelay: '120ms' }}>{t.hero.body}</p>
+                <div className="rise mt-7 flex max-w-md flex-col divide-y divide-line border-y border-line text-xs">
                   <div className="flex items-center justify-between gap-4 py-3">
                     <span className="flex items-center gap-2 text-muted"><HardDrive className="size-4" />{t.hero.engine}</span>
                     <RuntimeStatus runtime={runtime} dtype={bgDtype} device={bgDevice} />
@@ -264,7 +269,7 @@ export default function App() {
                   </div>
                 </div>
               </section>
-              <Dropzone onFiles={addFiles} />
+              <div className="rise" style={{ animationDelay: '200ms' }}><Dropzone onFiles={addFiles} /></div>
             </div>
             {error && <p role="alert" className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-md border border-danger/30 bg-panel px-3 py-1.5 text-xs text-danger shadow">{error}</p>}
           </div>
@@ -278,6 +283,7 @@ export default function App() {
               <Tool label={t.tool.upscaleHint(scale, selectedSr.name)} onClick={upscale} disabled={disabled} icon={<Sparkles className="size-4" />} text={t.tool.upscale(scale)} />
               <Tool label={t.tool.trimHint} onClick={() => push(trimTransparent(current!))} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
               <span className="mx-1 h-5 w-px bg-line" />
+              <Tool label={t.compare.hint} onClick={() => setCompare((v) => !v)} disabled={!canCompare || !!busy} icon={<Columns2 className="size-4" />} text={t.compare.toggle} active={compare && canCompare} />
               <Tool label={t.tool.undo} onClick={undo} disabled={(active.history.length ?? 0) < 2 || !!busy} icon={<Undo2 className="size-4" />} />
               <Tool label={t.tool.remove} onClick={() => remove(active.id)} disabled={!!busy} icon={<Trash2 className="size-4" />} />
               <div className="ml-auto flex shrink-0 items-center gap-1">
@@ -321,9 +327,10 @@ export default function App() {
             <SuggestedActions actions={suggestions} disabled={disabled} />
 
             <div className={`relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 ${preview === 'checker' ? 'checker' : ''}`} style={preview === 'checker' ? undefined : { background: preview }}>
-              {current && <PreviewCanvas bitmap={current} label={t.preview(active.name)} />}
+              {current && (compare && canCompare && original ? <CompareView key={active.id + active.history.length} before={original} after={current} /> : <PreviewCanvas key={active.id + active.history.length} bitmap={current} label={t.preview(active.name)} />)}
               {busy && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/70 backdrop-blur-sm" role="status" aria-live="polite">
+                  <div className="scanline pointer-events-none absolute inset-y-0 w-40" aria-hidden="true" />
                   <Loader2 className="size-8 animate-spin text-accent" />
                   <div className="text-sm">{busy}</div>
                   {progress && (
@@ -357,10 +364,10 @@ function PreviewCanvas({ bitmap, label }: { bitmap: Bitmap; label: string }) {
     canvas.height = bitmap.height
     canvas.getContext('2d')!.putImageData(new ImageData(bitmap.data as Uint8ClampedArray<ArrayBuffer>, bitmap.width, bitmap.height), 0, 0)
   }, [bitmap])
-  return <canvas ref={ref} role="img" aria-label={label} className="max-h-full max-w-full object-contain shadow-2xl shadow-black/30" />
+  return <canvas ref={ref} role="img" aria-label={label} className="pop max-h-full max-w-full object-contain shadow-2xl shadow-black/30" />
 }
 
-function Tool({ label, onClick, disabled, icon, text, primary }: { label: string; onClick: () => void; disabled?: boolean; icon: ReactNode; text?: string; primary?: boolean }) {
+function Tool({ label, onClick, disabled, icon, text, primary, active }: { label: string; onClick: () => void; disabled?: boolean; icon: ReactNode; text?: string; primary?: boolean; active?: boolean }) {
   return (
     <Tooltip label={label} placement="bottom">
       <button
@@ -368,31 +375,11 @@ function Tool({ label, onClick, disabled, icon, text, primary }: { label: string
         onClick={onClick}
         disabled={disabled}
         aria-label={text ? undefined : label}
-        className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition active:translate-y-px disabled:opacity-40 ${primary ? 'bg-accent/15 text-accent hover:bg-accent/25' : 'hover:bg-line'}`}
+        aria-pressed={active}
+        className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition active:translate-y-px disabled:opacity-40 ${primary ? 'bg-accent/15 text-accent hover:bg-accent/25' : active ? 'bg-line text-accent' : 'hover:bg-line'}`}
       >
         {icon}{text}
       </button>
     </Tooltip>
   )
-}
-
-function inspectAlpha({ data, width, height }: Bitmap) {
-  let transparent = false
-  let minX = width, minY = height, maxX = -1, maxY = -1
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const alpha = data[(y * width + x) * 4 + 3]
-      if (alpha < 255) transparent = true
-      if (alpha > 8) {
-        if (x < minX) minX = x
-        if (x > maxX) maxX = x
-        if (y < minY) minY = y
-        if (y > maxY) maxY = y
-      }
-    }
-  }
-  return {
-    transparent,
-    trimmable: maxX >= 0 && (minX > 0 || minY > 0 || maxX < width - 1 || maxY < height - 1),
-  }
 }

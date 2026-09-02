@@ -1,8 +1,8 @@
-# BG Studio
+# Alphaveil
 
 Remove backgrounds, crop and upscale images with open-source AI models running **entirely in the browser** (WebGPU, WASM fallback). Nothing is uploaded anywhere.
 
-Live: https://ketbome.github.io/bg-studio/
+Live: https://ketbome.github.io/alphaveil/
 
 ## Features
 
@@ -40,7 +40,7 @@ Inference runs in a Web Worker (`src/lib/worker.ts`); the UI talks to it through
 
 ```bash
 npm install
-npm run dev       # http://localhost:5173/bg-studio/
+npm run dev       # http://localhost:5173/alphaveil/
 npm run build     # dist/
 npm run lint
 ```

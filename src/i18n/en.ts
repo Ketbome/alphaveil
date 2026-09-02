@@ -1,5 +1,5 @@
 export const en = {
-  appName: 'BG Studio',
+  appName: 'Alphaveil',
   tagline: 'Local image workbench',
   hero: {
     kicker: 'Local image workbench',
@@ -43,6 +43,7 @@ export const en = {
     download: 'Download',
   },
   suggested: 'Suggested',
+  compare: { toggle: 'Compare', before: 'Before', after: 'After', hint: 'Drag the divider to compare before and after' },
   exportOpts: {
     format: 'Format',
     png: 'PNG (with transparency)',
@@ -108,7 +109,7 @@ export const en = {
     unsupported: (name: string) => `${name} is not a supported image.`,
   },
   seo: {
-    title: 'BG Studio · Remove image backgrounds with AI in your browser',
+    title: 'Alphaveil · Remove image backgrounds with AI in your browser',
     description: 'Remove backgrounds, crop and upscale images with open-source AI models running 100% in your browser (WebGPU). Nothing is uploaded.',
   },
 }

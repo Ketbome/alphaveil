@@ -1,11 +1,11 @@
 {
-  "name": "BG Studio",
-  "short_name": "BG Studio",
+  "name": "Alphaveil",
+  "short_name": "Alphaveil",
   "description": "Remove backgrounds, crop and upscale images with AI, 100% in your browser.",
-  "start_url": "/bg-studio/",
-  "scope": "/bg-studio/",
+  "start_url": "/alphaveil/",
+  "scope": "/alphaveil/",
   "display": "standalone",
-  "background_color": "#0b0f19",
-  "theme_color": "#0b0f19",
-  "icons": [{ "src": "/bg-studio/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }]
+  "background_color": "#1d1a16",
+  "theme_color": "#1d1a16",
+  "icons": [{ "src": "/alphaveil/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }]
 }

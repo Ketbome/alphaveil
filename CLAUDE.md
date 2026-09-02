@@ -1,4 +1,4 @@
-# BG Studio
+# Alphaveil
 
 Client-side image tool: background removal, crop, AI upscale. Everything runs in the browser.
 
@@ -8,7 +8,7 @@ Vite 8, React 19, TypeScript, Tailwind 4 (`@tailwindcss/vite`, theme tokens in `
 
 ## Commands
 
-- `npm run dev` — dev server at `/bg-studio/`
+- `npm run dev` — dev server at `/alphaveil/`
 - `npm run build` — `tsc -b && vite build`
 - `npm run lint` — oxlint
 
@@ -29,5 +29,5 @@ Vite 8, React 19, TypeScript, Tailwind 4 (`@tailwindcss/vite`, theme tokens in `
 - Colors only via theme tokens (`ink`, `panel`, `line`, `fg`, `muted`, `dim`, `accent`, `accent-solid`, `on-accent`, `warn`, `danger`) so both themes stay consistent. No raw `slate-*` / `lime-*` classes.
 - The preview renders the bitmap straight into a `<canvas>`; data URLs are only built for thumbnails and for the crop dialog.
 - Bitmaps cross the worker boundary as `{ data, width, height }` with transferred buffers.
-- `base` is `/bg-studio/` (GitHub Pages). Deploy workflow in `.github/workflows/deploy.yml`.
+- `base` is `/alphaveil/` (GitHub Pages). Deploy workflow in `.github/workflows/deploy.yml`.
 - RMBG-2.0 is gated on the Hub and cannot be loaded from a static site; do not add it without a token-based loader.

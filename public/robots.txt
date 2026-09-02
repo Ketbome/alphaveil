@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ketbome.github.io/bg-studio/sitemap.xml
+Sitemap: https://ketbome.github.io/alphaveil/sitemap.xml

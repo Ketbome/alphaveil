@@ -44,12 +44,14 @@ export function cropBitmap(bmp: Bitmap, x: number, y: number, w: number, h: numb
   return { data, width: w, height: h }
 }
 
-export function trimTransparent(bmp: Bitmap, threshold = 8): Bitmap {
-  const { data, width, height } = bmp
+export function inspectAlpha({ data, width, height }: Bitmap, threshold = 8) {
+  let transparent = false
   let minX = width, minY = height, maxX = -1, maxY = -1
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (data[(y * width + x) * 4 + 3] > threshold) {
+      const alpha = data[(y * width + x) * 4 + 3]
+      if (alpha < 255) transparent = true
+      if (alpha > threshold) {
         if (x < minX) minX = x
         if (x > maxX) maxX = x
         if (y < minY) minY = y
@@ -57,8 +59,18 @@ export function trimTransparent(bmp: Bitmap, threshold = 8): Bitmap {
       }
     }
   }
-  if (maxX < 0) return bmp
-  return cropBitmap(bmp, minX, minY, maxX - minX + 1, maxY - minY + 1)
+  const empty = maxX < 0
+  return {
+    transparent,
+    trimmable: !empty && (minX > 0 || minY > 0 || maxX < width - 1 || maxY < height - 1),
+    bounds: empty ? null : { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 },
+  }
+}
+
+export function trimTransparent(bmp: Bitmap, threshold = 8): Bitmap {
+  const { bounds } = inspectAlpha(bmp, threshold)
+  if (!bounds) return bmp
+  return cropBitmap(bmp, bounds.x, bounds.y, bounds.width, bounds.height)
 }
 
 export function hasAlpha(bmp: Bitmap) {

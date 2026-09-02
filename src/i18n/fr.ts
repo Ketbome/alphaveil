@@ -1,7 +1,7 @@
 import type { Dict } from './en'
 
 export const fr: Dict = {
-  appName: 'BG Studio',
+  appName: 'Alphaveil',
   tagline: "Atelier d'image local",
   hero: {
     kicker: "Atelier d'image local",
@@ -45,6 +45,7 @@ export const fr: Dict = {
     download: 'Télécharger',
   },
   suggested: 'Suggéré',
+  compare: { toggle: 'Comparer', before: 'Avant', after: 'Après', hint: 'Faites glisser le rideau pour comparer avant et après' },
   exportOpts: {
     format: 'Format',
     png: 'PNG (avec transparence)',
@@ -110,7 +111,7 @@ export const fr: Dict = {
     unsupported: (name) => `${name} n'est pas une image prise en charge.`,
   },
   seo: {
-    title: "BG Studio · Supprimer l'arrière-plan d'une image avec l'IA dans votre navigateur",
+    title: "Alphaveil · Supprimer l'arrière-plan d'une image avec l'IA dans votre navigateur",
     description: "Supprimez l'arrière-plan, recadrez et agrandissez vos images avec des modèles d'IA open source exécutés à 100 % dans votre navigateur (WebGPU). Rien n'est envoyé sur un serveur.",
   },
 }

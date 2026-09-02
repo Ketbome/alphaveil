@@ -1,7 +1,7 @@
 import type { Dict } from './en'
 
 export const pt: Dict = {
-  appName: 'BG Studio',
+  appName: 'Alphaveil',
   tagline: 'Oficina de imagem local',
   hero: {
     kicker: 'Oficina de imagem local',
@@ -45,6 +45,7 @@ export const pt: Dict = {
     download: 'Baixar',
   },
   suggested: 'Sugerido',
+  compare: { toggle: 'Comparar', before: 'Antes', after: 'Depois', hint: 'Arraste a cortina para comparar o antes e o depois' },
   exportOpts: {
     format: 'Formato',
     png: 'PNG (com transparência)',
@@ -110,7 +111,7 @@ export const pt: Dict = {
     unsupported: (name) => `${name} não é uma imagem compatível.`,
   },
   seo: {
-    title: 'BG Studio · Remova o fundo de imagens com IA no seu navegador',
+    title: 'Alphaveil · Remova o fundo de imagens com IA no seu navegador',
     description: 'Remova fundos, recorte e amplie imagens com modelos de IA open source rodando 100% no seu navegador (WebGPU). Nada é enviado a servidores.',
   },
 }
