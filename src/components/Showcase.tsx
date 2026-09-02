@@ -46,7 +46,7 @@ export function Showcase() {
   }, [])
 
   return (
-    <div ref={root} className="pointer-events-none flex w-full max-w-full gap-3 overflow-x-auto px-1 pb-2 pt-4 lg:contents" aria-label={t.showcase.label} role="group">
+    <div ref={root} className="no-scrollbar pointer-events-none flex w-full max-w-full gap-3 overflow-x-auto px-1 pb-2 pt-4 lg:contents" aria-label={t.showcase.label} role="group">
       {SPECIMENS.map((s, i) => (
         <figure
           key={s.src}

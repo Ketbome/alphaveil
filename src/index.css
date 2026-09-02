@@ -129,6 +129,17 @@ button, a, input, select {
   @apply border-warn/35 bg-warn/5 text-warn;
 }
 
+/* Rows of cards that scroll sideways: the bar is classic on Windows and Android
+   and cuts into the thumbnails. Scrolling still works with wheel, drag or swipe. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 .checker {
   background-color: var(--checker-b);
   background-image:

@@ -34,7 +34,7 @@ export function ImageQueue({ items, activeId, disabled, max, onSelect, onRemove,
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start gap-3 p-3" aria-label={t.queue.label}>
-      <div className="pointer-events-auto flex min-w-0 items-center overflow-x-auto py-2 pl-2 pr-1" role="tablist" aria-label={t.queue.label}>
+      <div className="no-scrollbar pointer-events-auto flex min-w-0 items-center overflow-x-auto py-2 pl-2 pr-1" role="tablist" aria-label={t.queue.label}>
         {items.map((item, index) => {
           const active = item.id === activeId
           return (
