@@ -13,6 +13,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'favicon.ico', 'favicon-*.png', 'apple-touch-icon.png', 'og.png', 'showcase/*.webp'],
       manifest: {
+        id: '/alphaveil/',
         name: 'Alphaveil',
         short_name: 'Alphaveil',
         description: 'Remove backgrounds, crop and upscale images with AI, 100% in your browser.',
@@ -27,6 +28,9 @@ export default defineConfig({
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+        screenshots: [
+          { src: 'og.png', sizes: '1200x630', type: 'image/png', form_factor: 'wide', label: 'Alphaveil workspace' },
         ],
       },
       workbox: {

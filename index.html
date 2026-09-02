@@ -7,10 +7,19 @@
     <meta name="description" content="Remove backgrounds, crop and upscale images with open-source AI models running 100% in your browser (WebGPU). Nothing is uploaded." />
     <meta name="keywords" content="remove background, background remover, AI, WebGPU, upscale image, crop image, browser, free, privacy, quitar fondo, remover fundo, supprimer arrière-plan" />
     <meta name="robots" content="index, follow" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#151310" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#f3efe6" media="(prefers-color-scheme: light)" />
+    <meta name="application-name" content="Alphaveil" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Alphaveil" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Models are fetched from the Hub on first use; warm the connection early. -->
+    <link rel="preconnect" href="https://huggingface.co" crossorigin />
+    <link rel="dns-prefetch" href="https://cdn-lfs.hf.co" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" />
     <link rel="alternate" hreflang="en" href="https://ketbome.github.io/alphaveil/" />
     <link rel="alternate" hreflang="es" href="https://ketbome.github.io/alphaveil/es/" />
@@ -18,12 +27,12 @@
     <link rel="alternate" hreflang="fr" href="https://ketbome.github.io/alphaveil/fr/" />
     <link rel="alternate" hreflang="x-default" href="https://ketbome.github.io/alphaveil/" />
     <link rel="canonical" href="https://ketbome.github.io/alphaveil/" />
-    <link rel="icon" href="./favicon.ico" sizes="48x48" />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16.png" />
-    <link rel="icon" type="image/png" sizes="96x96" href="./favicon-96.png" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="icon" href="/alphaveil/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/alphaveil/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/alphaveil/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/alphaveil/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/alphaveil/favicon-96.png" />
+    <link rel="apple-touch-icon" href="/alphaveil/apple-touch-icon.png" />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Alphaveil" />
@@ -31,6 +40,7 @@
     <meta property="og:title" content="Alphaveil · Remove image backgrounds with AI in your browser" />
     <meta property="og:description" content="Remove backgrounds, crop and upscale images with open-source AI models running 100% in your browser (WebGPU). Nothing is uploaded." />
     <meta property="og:image" content="https://ketbome.github.io/alphaveil/og.png" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Alphaveil: local AI background removal, crop and upscale" />
@@ -42,6 +52,7 @@
     <meta name="twitter:title" content="Alphaveil · Remove image backgrounds with AI in your browser" />
     <meta name="twitter:description" content="Remove backgrounds, crop and upscale images with open-source AI models running 100% in your browser (WebGPU). Nothing is uploaded." />
     <meta name="twitter:image" content="https://ketbome.github.io/alphaveil/og.png" />
+    <meta name="twitter:image:alt" content="Alphaveil: local AI background removal, crop and upscale" />
 
     <script type="application/ld+json">
     {
@@ -51,8 +62,21 @@
       "url": "https://ketbome.github.io/alphaveil/",
       "description": "Remove backgrounds, crop and upscale images with open-source AI models running 100% in your browser (WebGPU). Nothing is uploaded.",
       "applicationCategory": "MultimediaApplication",
+      "applicationSubCategory": "Photo editor",
       "operatingSystem": "Any",
       "browserRequirements": "Requires a modern browser; WebGPU recommended",
+      "screenshot": "https://ketbome.github.io/alphaveil/og.png",
+      "featureList": [
+        "Background removal with open-source models (BEN2, BiRefNet, RMBG 1.4, MODNet)",
+        "Click or drag a box to cut out a single object (EdgeTAM / Segment Anything 2)",
+        "Edge refinement for hair and fur (ViTMatte)",
+        "Mask retouching brush with erase, restore and AI-in-area",
+        "AI upscaling up to 4x (Swin2SR)",
+        "Crop, subject framing, auto-trim and backdrop compositing",
+        "Batch background removal and ZIP export",
+        "PNG, WebP and JPG export with an optional file-size cap",
+        "Runs offline as an installable PWA; no image ever leaves the device"
+      ],
       "inLanguage": ["en", "es", "pt", "fr"],
       "isAccessibleForFree": true,
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
