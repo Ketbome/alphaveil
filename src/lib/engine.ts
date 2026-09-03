@@ -19,9 +19,22 @@ let worker: Worker | null = null
 let seq = 0
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void } & Listeners>()
 
+// The worker dies with the tab's memory, or with a chunk that is no longer served
+// after a deploy. Nothing would ever answer the requests in flight, so fail them
+// instead of leaving the UI spinning forever.
+function die() {
+  const dead = [...pending.values()]
+  pending.clear()
+  worker?.terminate()
+  worker = null
+  dead.forEach((p) => p.reject(Object.assign(new Error('engine stopped'), { name: 'EngineDead' })))
+}
+
 function getWorker() {
   if (worker) return worker
   worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
+  worker.onerror = die
+  worker.onmessageerror = die
   worker.onmessage = (e: MessageEvent<Response>) => {
     const msg = e.data
     const p = pending.get(msg.id)

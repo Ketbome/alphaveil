@@ -34,6 +34,7 @@ export const en = {
     removeBgHint: (model: string) => `Remove background with ${model}`,
     upscale: (n: number) => `Upscale ×${n}`,
     upscaleHint: (n: number, model: string) => `Upscale ×${n} with AI (${model})`,
+    upscaleTooBig: (max: number) => `Already at the ${max} px limit: upscaling again would not fit in memory.`,
     trim: 'Trim to content',
     trimHint: 'Automatically crop transparent borders',
     trimDetail: 'Remove empty border',
@@ -101,6 +102,7 @@ export const en = {
     refine: 'Refine edges',
     refineHint: 'Recompute hair and fur edges with a matting model',
     smartHint: 'Start the stroke on the background you want gone: only pixels with a similar color are erased, so you can paint roughly along the subject.',
+    runFailed: 'That did not finish. Try again, or close and reopen the retouch tool.',
   },
   quality: {
     label: 'Cutout quality',
@@ -195,6 +197,7 @@ export const en = {
     tooMany: (max: number) => `Only ${max} images can be open at once; the extra files were skipped.`,
     unsupported: (name: string) => `${name} is not a supported image.`,
     gpuLimit: (name: string) => `${name} needs more from this GPU than it offers, and it is too heavy for the CPU. Pick another quality.`,
+    engineDied: 'The engine stopped. Reload the page and try again.',
   },
   seo: {
     title: 'Alphaveil · Remove image backgrounds with AI in your browser',

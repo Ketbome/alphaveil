@@ -36,6 +36,7 @@ export const fr: Dict = {
     removeBgHint: (model) => `Supprimer l'arrière-plan avec ${model}`,
     upscale: (n) => `Agrandir ×${n}`,
     upscaleHint: (n, model) => `Agrandir ×${n} avec l'IA (${model})`,
+    upscaleTooBig: (max) => `Déjà à la limite de ${max} px : agrandir encore ne tiendrait pas en mémoire.`,
     trim: 'Ajuster au contenu',
     trimHint: 'Rogner automatiquement les bords transparents',
     trimDetail: 'Retirer le bord vide',
@@ -103,6 +104,7 @@ export const fr: Dict = {
     refine: 'Affiner les bords',
     refineHint: 'Recalculer cheveux et poils avec un modèle de matting',
     smartHint: "Commencez le trait sur l'arrière-plan à retirer : seuls les pixels de couleur proche sont effacés, vous pouvez donc peindre sans précision le long du sujet.",
+    runFailed: "Cela n'a pas abouti. Réessayez, ou fermez puis rouvrez la retouche.",
   },
   quality: {
     label: 'Qualité du détourage',
@@ -197,6 +199,7 @@ export const fr: Dict = {
     tooMany: (max) => `Seules ${max} images peuvent être ouvertes ; les fichiers en trop ont été ignorés.`,
     unsupported: (name) => `${name} n'est pas une image prise en charge.`,
     gpuLimit: (name) => `${name} demande plus que ce que ce GPU propose, et il est trop lourd pour le CPU. Choisissez une autre qualité.`,
+    engineDied: "Le moteur s'est arrêté. Rechargez la page et réessayez.",
   },
   seo: {
     title: "Alphaveil · Supprimer l'arrière-plan d'une image avec l'IA dans votre navigateur",

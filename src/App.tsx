@@ -6,10 +6,10 @@ import type { Area } from 'react-easy-crop'
 import { engine, type Progress } from './lib/engine'
 import type { Bitmap, Box, Point, Status } from './lib/worker'
 import { BG_MODELS, MATTE_MODEL, NO_RUNTIME, SAM_MODEL, SR_MODELS, SR_SCALE, helperDevice, isGpuLimit, isGpuLost, modelAvailable, modelDevice, modelDtype, type ModelSpec, type Runtime, type Tier } from './lib/models'
-import { composeBackdrop, cropBitmap, download, exportBlob, fileToBitmap, formatBytes, inspectAlpha, resizeBitmap, smartCrop, toDataUrl, toThumbnailDataUrl } from './lib/image'
+import { MAX_SIDE_OUT, composeBackdrop, cropBitmap, download, exportBlob, fileToBitmap, formatBytes, inspectAlpha, resizeBitmap, smartCrop, toObjectUrl, toThumbnailDataUrl } from './lib/image'
 import { zipSync } from 'fflate'
 import { useTheme, type Theme } from './lib/theme'
-import { compareBase, lastOpaque, type Step, type StepKind } from './lib/history'
+import { compareBase, lastOpaque, trimHistory, type Step, type StepKind } from './lib/history'
 import { useInstallPrompt } from './lib/install'
 import { LANGS, useI18n, type Lang } from './i18n'
 import { Dropzone } from './components/Dropzone'
@@ -36,7 +36,6 @@ interface Item {
 }
 
 export const MAX_IMAGES = 8
-const MAX_HISTORY = 6
 
 const stored = (key: string, fallback: string) => {
   try { return localStorage.getItem(key) ?? fallback } catch { return fallback }
@@ -142,7 +141,7 @@ export default function App() {
     setItems((list) => list.map((i) => {
       if (i.id !== id) return i
       const step: Step = { bitmap: b, kind, origin: origin ?? i.history.at(-1)!.origin }
-      return { ...i, history: [...i.history, step].slice(-MAX_HISTORY), thumbnail: toThumbnailDataUrl(b) }
+      return { ...i, history: trimHistory([...i.history, step]), thumbnail: toThumbnailDataUrl(b) }
     }))
   }
   const push = (b: Bitmap, kind: StepKind, origin?: Bitmap) => pushTo(activeId, b, kind, origin)
@@ -163,12 +162,16 @@ export default function App() {
     }))
   }
   const remove = (id: string) => {
-    setItems((list) => {
-      const next = list.filter((i) => i.id !== id)
-      if (id === activeId) setActiveId(next[Math.min(list.findIndex((i) => i.id === id), next.length - 1)]?.id ?? null)
-      return next
-    })
+    if (id === activeId) {
+      const gone = items.findIndex((i) => i.id === id)
+      const next = items.filter((i) => i.id !== id)
+      setActiveId(next[Math.min(gone, next.length - 1)]?.id ?? null)
+    }
+    setItems((list) => list.filter((i) => i.id !== id))
   }
+
+  const errorText = (e: unknown) =>
+    e instanceof Error ? (e.name === 'EngineDead' ? t.errors.engineDied : e.message) : String(e)
 
   const onStatus = (s: Status) => setBusy(s.key === 'segmenting' ? t.busy.segmenting : s.key === 'matting' ? t.busy.matting : t.busy.upscaling(s.done, s.total))
 
@@ -179,24 +182,31 @@ export default function App() {
       const out = await fn()
       push(out, kind, origin?.(out))
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errorText(e))
     } finally {
       setBusy(null)
       setProgress(null)
     }
   }
 
+  // Decoding is async, so two drops (or a drop and a paste) would both measure an
+  // empty queue and both fill it. Slots are claimed before the first await instead.
+  const claimed = useRef(0)
+  useEffect(() => { claimed.current = items.length }, [items])
   const addFiles = async (files: File[]) => {
     setError(null)
     const images = files.filter((f) => f.type.startsWith('image/'))
-    const room = MAX_IMAGES - items.length
+    const room = Math.max(0, MAX_IMAGES - claimed.current)
     if (images.length > room) setError(t.errors.tooMany(MAX_IMAGES))
+    const taken = images.slice(0, room)
+    claimed.current += taken.length
     const added: Item[] = []
-    for (const file of images.slice(0, Math.max(0, room))) {
+    for (const file of taken) {
       try {
         const bmp = await fileToBitmap(file)
         added.push({ id: crypto.randomUUID(), name: file.name.replace(/\.[^.]+$/, ''), history: [{ bitmap: bmp, kind: 'source', origin: bmp }], thumbnail: toThumbnailDataUrl(bmp) })
       } catch {
+        claimed.current--
         setError(t.errors.unsupported(file.name))
       }
     }
@@ -205,14 +215,16 @@ export default function App() {
     if (!activeId) setActiveId(added[0].id)
   }
 
+  const onFiles = useRef(addFiles)
+  useEffect(() => { onFiles.current = addFiles })
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       const files = Array.from(e.clipboardData?.files ?? [])
-      if (files.length) addFiles(files)
+      if (files.length) void onFiles.current(files)
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  })
+  }, [])
 
   const loadBg = async (rt: Runtime, spec: ModelSpec = selectedBg) => {
     if (!modelAvailable(spec, rt)) throw new Error(t.errors.gpuLimit(spec.name))
@@ -297,7 +309,7 @@ export default function App() {
         }
       })
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errorText(e))
     } finally {
       setBusy(null)
       setProgress(null)
@@ -342,8 +354,13 @@ export default function App() {
     return engine.upscale(current!, SR_SCALE[selectedSr.id], onStatus)
   }), (out) => resizeBitmap(active!.history.at(-1)!.origin, out.width, out.height))
 
-  const applyCrop = (a: Area) => {
+  const openCrop = async () => setCropSrc(await toObjectUrl(current!))
+  const closeCrop = () => {
+    if (cropSrc) URL.revokeObjectURL(cropSrc)
     setCropSrc(null)
+  }
+  const applyCrop = (a: Area) => {
+    closeCrop()
     reframe('crop', Math.round(a.x), Math.round(a.y), Math.round(a.width), Math.round(a.height))
   }
 
@@ -357,6 +374,7 @@ export default function App() {
   }
 
   const scale = SR_SCALE[srModel]
+  const tooBigToUpscale = !!current && Math.max(current.width, current.height) * scale > MAX_SIDE_OUT
   const disabled = !current || !!busy || !runtime
   const suggestions: SuggestedAction[] = []
   if (current && !transparent) {
@@ -533,10 +551,10 @@ export default function App() {
         ) : (
           <>
             <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-2 sm:px-3" role="toolbar" aria-label={t.appName}>
-              <Tool label={t.tool.cropHint} onClick={() => setCropSrc(toDataUrl(current!))} disabled={disabled} icon={<Crop className="size-4" />} text={t.tool.crop} />
+              <Tool label={t.tool.cropHint} onClick={() => void openCrop()} disabled={disabled} icon={<Crop className="size-4" />} text={t.tool.crop} />
               <Tool label={t.tool.removeBgHint(selectedBg.name)} onClick={removeBg} disabled={disabled} icon={<Eraser className="size-4" />} text={t.tool.removeBg} primary />
               <QualityChip value={selectedBg} runtime={runtime ?? NO_RUNTIME} onChange={chooseBg} onUnblock={unblockGpu} compact />
-              <Tool label={t.tool.upscaleHint(scale, selectedSr.name)} onClick={upscale} disabled={disabled} icon={<Sparkles className="size-4" />} text={t.tool.upscale(scale)} />
+              <Tool label={tooBigToUpscale ? t.tool.upscaleTooBig(MAX_SIDE_OUT) : t.tool.upscaleHint(scale, selectedSr.name)} onClick={upscale} disabled={disabled || tooBigToUpscale} icon={<Sparkles className="size-4" />} text={t.tool.upscale(scale)} />
               <Tool label={t.tool.trimHint} onClick={() => bounds && reframe('trim', bounds.x, bounds.y, bounds.width, bounds.height)} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
               <Tool label={t.retouch.hint} onClick={() => setRetouching('erase')} disabled={disabled} icon={<Paintbrush className="size-4" />} text={t.retouch.title} />
               <Popover placement="bottom-start" trigger={({ open }) => (
@@ -647,7 +665,7 @@ export default function App() {
         )}
       </main>
 
-      {cropSrc && <CropDialog src={cropSrc} onCancel={() => setCropSrc(null)} onApply={applyCrop} />}
+      {cropSrc && <CropDialog src={cropSrc} onCancel={closeCrop} onApply={applyCrop} />}
       {retouching && current && <MaskEditor bitmap={current} source={blurSource} initialMode={retouching === 'erase' && !transparent ? 'select' : retouching} onCancel={() => setRetouching(null)} onApply={(b) => { setRetouching(null); push(b, 'retouch') }} onDetect={detectInArea} onSamEmbed={samEmbed} onSamMask={samMask} onMatte={matte} />}
     </div>
   )

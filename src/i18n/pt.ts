@@ -36,6 +36,7 @@ export const pt: Dict = {
     removeBgHint: (model) => `Remover fundo com ${model}`,
     upscale: (n) => `Ampliar ×${n}`,
     upscaleHint: (n, model) => `Ampliar ×${n} com IA (${model})`,
+    upscaleTooBig: (max) => `Já está no limite de ${max} px: escalar de novo não caberia na memória.`,
     trim: 'Ajustar ao conteúdo',
     trimHint: 'Recortar automaticamente as bordas transparentes',
     trimDetail: 'Remover borda vazia',
@@ -103,6 +104,7 @@ export const pt: Dict = {
     refine: 'Refinar bordas',
     refineHint: 'Recalcular cabelo e pelagem com um modelo de matting',
     smartHint: 'Comece o traço sobre o fundo que quer remover: só pixels de cor parecida são apagados, então pode pintar sem cuidado pela borda do sujeito.',
+    runFailed: 'Não foi possível concluir. Tente de novo, ou feche e abra o retoque outra vez.',
   },
   quality: {
     label: 'Qualidade do recorte',
@@ -197,6 +199,7 @@ export const pt: Dict = {
     tooMany: (max) => `Só é possível abrir ${max} imagens; os arquivos extras foram ignorados.`,
     unsupported: (name) => `${name} não é uma imagem compatível.`,
     gpuLimit: (name) => `${name} precisa de mais do que esta GPU oferece e é pesado demais para a CPU. Escolha outra qualidade.`,
+    engineDied: 'O motor parou. Recarregue a página e tente de novo.',
   },
   seo: {
     title: 'Alphaveil · Remova o fundo de imagens com IA no seu navegador',

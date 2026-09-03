@@ -1,6 +1,9 @@
 import type { Bitmap } from './worker'
 
 export const MAX_SIDE = 2048
+// Upscaling past this stops being useful and starts being dangerous: the buffers grow
+// with the square of the side, and canvas backends quietly give up around here.
+export const MAX_SIDE_OUT = 8192
 
 export async function fileToBitmap(file: File): Promise<Bitmap> {
   const img = await createImageBitmap(file)
@@ -27,15 +30,52 @@ export function toDataUrl(bmp: Bitmap) {
   return toCanvas(bmp).toDataURL('image/png')
 }
 
+// Box filter straight from the pixels: going through a full-size canvas to draw a
+// 96 px tile costs two copies of the whole image on every step of every history.
 export function toThumbnailDataUrl(bmp: Bitmap, maxSide = 96) {
   const ratio = Math.min(1, maxSide / Math.max(bmp.width, bmp.height))
   const width = Math.max(1, Math.round(bmp.width * ratio))
   const height = Math.max(1, Math.round(bmp.height * ratio))
+  const out = new ImageData(width, height)
+  for (let y = 0; y < height; y++) {
+    const y0 = Math.floor((y * bmp.height) / height)
+    const y1 = Math.max(y0 + 1, Math.floor(((y + 1) * bmp.height) / height))
+    for (let x = 0; x < width; x++) {
+      const x0 = Math.floor((x * bmp.width) / width)
+      const x1 = Math.max(x0 + 1, Math.floor(((x + 1) * bmp.width) / width))
+      // Weight color by alpha so transparent pixels do not bleed into the edges.
+      let r = 0, g = 0, b = 0, a = 0, n = 0
+      for (let sy = y0; sy < y1; sy++) {
+        for (let sx = x0; sx < x1; sx++) {
+          const i = (sy * bmp.width + sx) * 4
+          const alpha = bmp.data[i + 3]
+          r += bmp.data[i] * alpha
+          g += bmp.data[i + 1] * alpha
+          b += bmp.data[i + 2] * alpha
+          a += alpha
+          n++
+        }
+      }
+      const o = (y * width + x) * 4
+      out.data[o] = a ? r / a : 0
+      out.data[o + 1] = a ? g / a : 0
+      out.data[o + 2] = a ? b / a : 0
+      out.data[o + 3] = a / n
+    }
+  }
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
-  canvas.getContext('2d')!.drawImage(toCanvas(bmp), 0, 0, width, height)
+  canvas.getContext('2d')!.putImageData(out, 0, 0)
   return canvas.toDataURL('image/webp', 0.8)
+}
+
+// The crop dialog needs a URL, and a data URL for a large image is a string of the
+// same order as the image itself. Callers revoke it when the dialog closes.
+export function toObjectUrl(bmp: Bitmap) {
+  return new Promise<string>((resolve, reject) =>
+    toCanvas(bmp).toBlob((blob) => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error('crop'))), 'image/png'),
+  )
 }
 
 export function cropBitmap(bmp: Bitmap, x: number, y: number, w: number, h: number): Bitmap {
@@ -55,7 +95,20 @@ export function resizeBitmap(bmp: Bitmap, w: number, h: number): Bitmap {
   return { data, width: w, height: h }
 }
 
-export function inspectAlpha({ data, width, height }: Bitmap, threshold = 8) {
+// Scanning every pixel is too slow to redo on each render, and callers ask about
+// the same bitmaps over and over: bitmaps are never mutated, so the answer keeps.
+const alphaCache = new WeakMap<Bitmap, ReturnType<typeof scanAlpha>>()
+
+export function inspectAlpha(bmp: Bitmap, threshold = 8) {
+  if (threshold !== 8) return scanAlpha(bmp, threshold)
+  const cached = alphaCache.get(bmp)
+  if (cached) return cached
+  const result = scanAlpha(bmp, threshold)
+  alphaCache.set(bmp, result)
+  return result
+}
+
+function scanAlpha({ data, width, height }: Bitmap, threshold: number) {
   let transparent = false
   let minX = width, minY = height, maxX = -1, maxY = -1
   for (let y = 0; y < height; y++) {

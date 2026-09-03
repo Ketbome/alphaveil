@@ -122,9 +122,24 @@ async function removeBg(id: number, image: Bitmap) {
 const TILE = 192
 const OVERLAP = 16
 
+// RawImage.crop() rebuilds the whole image on a canvas for every call, so cutting
+// a few hundred tiles out of it costs a full clone each time; copy the rows instead.
+function rgbTile({ data, width }: Bitmap, x0: number, y0: number, w: number, h: number) {
+  const out = new Uint8ClampedArray(w * h * 3)
+  for (let y = 0; y < h; y++) {
+    let s = ((y + y0) * width + x0) * 4
+    let d = y * w * 3
+    for (let x = 0; x < w; x++, s += 4) {
+      out[d++] = data[s]
+      out[d++] = data[s + 1]
+      out[d++] = data[s + 2]
+    }
+  }
+  return new RawImage(out, w, h, 3)
+}
+
 async function upscale(id: number, image: Bitmap, scale: number) {
   const pipe = (await cache.get(current.sr!)!) as unknown as (i: RawImage) => Promise<RawImage>
-  const src = new RawImage(image.data, image.width, image.height, 4)
   const alpha = new Uint8ClampedArray(image.width * image.height)
   for (let i = 0; i < alpha.length; i++) alpha[i] = image.data[i * 4 + 3]
 
@@ -148,7 +163,7 @@ async function upscale(id: number, image: Bitmap, scale: number) {
       const cx1 = Math.min(image.width, x1 + OVERLAP)
       const cy1 = Math.min(image.height, y1 + OVERLAP)
 
-      const tile = await src.rgb().crop([cx0, cy0, cx1 - 1, cy1 - 1])
+      const tile = rgbTile(image, cx0, cy0, cx1 - cx0, cy1 - cy0)
       const up = await pipe(tile)
 
       const ox = (x0 - cx0) * scale
@@ -192,8 +207,10 @@ async function samEmbed(id: number, image: Bitmap, device: Device) {
     ])
     return { model: model as EdgeTamModel, processor }
   })()
-  sam.catch(() => { sam = null })
-  const state = await sam
+  // Only drop the session this call built: a later one may already have replaced it.
+  const loading = sam
+  loading.catch(() => { if (sam === loading) sam = null })
+  const state = await loading
   post({ id, type: 'status', status: { key: 'segmenting' } })
   const raw = new RawImage(image.data, image.width, image.height, 4).rgb()
   const inputs = await state.processor(raw)
@@ -261,8 +278,9 @@ async function refineMatte(id: number, image: Bitmap, device: Device): Promise<M
     ])
     return { model: model as VitMatteForImageMatting, processor }
   })()
-  matte.catch(() => { matte = null })
-  const { model, processor } = await matte
+  const loading = matte
+  loading.catch(() => { if (matte === loading) matte = null })
+  const { model, processor } = await loading
   post({ id, type: 'status', status: { key: 'matting' } })
 
   const MAX = 1024

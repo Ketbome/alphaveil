@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Eraser, Loader2, MousePointerClick, Paintbrush, Sparkles, Undo2, WandSparkles, X } from 'lucide-react'
 import type { Bitmap, Box, Mask, Masks, Point } from '../lib/worker'
-import { toCanvas } from '../lib/image'
+import { inspectAlpha, toCanvas } from '../lib/image'
 import { useI18n } from '../i18n'
 
 interface Props {
@@ -18,6 +18,9 @@ interface Props {
 
 export type Mode = 'erase' | 'restore' | 'detect' | 'select'
 const MAX_UNDO = 6
+// Every snapshot is a full copy of the image: six of them on a 2880 px photo is
+// 124 MB, enough to take the tab down on its own. Bytes decide, the count is the cap.
+const MAX_UNDO_BYTES = 64 * 1024 * 1024
 
 export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamEmbed, onSamMask, onMatte, initialMode }: Props) {
   const { t } = useI18n()
@@ -25,9 +28,8 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
   const regionRef = useRef<HTMLCanvasElement>(null)
   const cursorRef = useRef<HTMLDivElement>(null)
   const sourceCanvas = useRef<HTMLCanvasElement | null>(null)
-  const undo = useRef<ImageData[]>([])
   const last = useRef<{ x: number; y: number } | null>(null)
-  const opaque = !bitmap.data.some((v, i) => i % 4 === 3 && v < 255)
+  const opaque = !inspectAlpha(bitmap).transparent
   const [mode, setMode] = useState<Mode>(initialMode ?? (opaque ? 'select' : 'erase'))
   const [points, setPoints] = useState<Point[]>([])
   const [positive, setPositive] = useState(true)
@@ -39,7 +41,9 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
   const [embedding, setEmbedding] = useState<'idle' | 'loading' | 'ready'>('idle')
   const [failed, setFailed] = useState(false)
   const [refining, setRefining] = useState(false)
+  const [runFailed, setRunFailed] = useState(false)
   const embedded = useRef(false)
+  const [undone, setUndone] = useState<{ of: Bitmap; steps: ImageData[] }>({ of: bitmap, steps: [] })
   const [hasRegion, setHasRegion] = useState(false)
   const [detecting, setDetecting] = useState(false)
   const [size, setSize] = useState(Math.max(12, Math.round(Math.max(bitmap.width, bitmap.height) / 30)))
@@ -62,8 +66,14 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     const region = regionRef.current!
     region.width = bitmap.width
     region.height = bitmap.height
-    undo.current = []
   }, [bitmap, source, canRestore])
+
+  // The snapshots belong to the bitmap they were taken from, so another one starts
+  // over. Past MAX_UNDO the oldest is dropped, which is why the buttons watch the
+  // stack itself: how many edits were applied says nothing about what can be undone.
+  const undoable = undone.of === bitmap ? undone.steps : []
+  const snapshots = Math.max(1, Math.min(MAX_UNDO, Math.floor(MAX_UNDO_BYTES / (bitmap.width * bitmap.height * 4))))
+  const pushUndo = (img: ImageData) => setUndone({ of: bitmap, steps: [...undoable, img].slice(-snapshots) })
 
   useEffect(() => {
     if (mode !== 'select' || embedded.current) return
@@ -234,8 +244,7 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     const mask = selected()
     if (!mask) return
     const ctx = canvasRef.current!.getContext('2d', { willReadFrequently: true })!
-    undo.current.push(ctx.getImageData(0, 0, bitmap.width, bitmap.height))
-    if (undo.current.length > MAX_UNDO) undo.current.shift()
+    pushUndo(ctx.getImageData(0, 0, bitmap.width, bitmap.height))
     const img = ctx.getImageData(0, 0, bitmap.width, bitmap.height)
     const m = feathered(mask)
     const src = sourceData.current
@@ -261,14 +270,16 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     const input = new Uint8ClampedArray(img.data)
     if (rgb) for (let i = 0; i < input.length; i += 4) { input[i] = rgb[i]; input[i + 1] = rgb[i + 1]; input[i + 2] = rgb[i + 2] }
     setRefining(true)
+    setRunFailed(false)
     try {
       const m = await onMatte({ data: input, width: bitmap.width, height: bitmap.height })
-      undo.current.push(img)
-      if (undo.current.length > MAX_UNDO) undo.current.shift()
+      pushUndo(img)
       const next = ctx.getImageData(0, 0, bitmap.width, bitmap.height)
       for (let i = 0; i < m.data.length; i++) next.data[i * 4 + 3] = m.data[i]
       ctx.putImageData(next, 0, 0)
       setStrokes((n) => n + 1)
+    } catch {
+      setRunFailed(true)
     } finally {
       setRefining(false)
     }
@@ -285,8 +296,7 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     if (mode === 'restore' && !canRestore) return
     if (mode !== 'detect') {
       const ctx = canvasRef.current!.getContext('2d', { willReadFrequently: true })!
-      undo.current.push(ctx.getImageData(0, 0, bitmap.width, bitmap.height))
-      if (undo.current.length > MAX_UNDO) undo.current.shift()
+      pushUndo(ctx.getImageData(0, 0, bitmap.width, bitmap.height))
     }
     e.currentTarget.setPointerCapture(e.pointerId)
     last.current = null
@@ -361,10 +371,10 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
       crop[di] = rgbSource[si]; crop[di + 1] = rgbSource[si + 1]; crop[di + 2] = rgbSource[si + 2]; crop[di + 3] = 255
     }
     setDetecting(true)
+    setRunFailed(false)
     try {
       const out = await onDetect({ data: crop, width: cw, height: ch })
-      undo.current.push(ctx.getImageData(0, 0, width, height))
-      if (undo.current.length > MAX_UNDO) undo.current.shift()
+      pushUndo(ctx.getImageData(0, 0, width, height))
       const next = current
       for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
         const i = ((y + y0) * width + (x + x0)) * 4
@@ -377,14 +387,17 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
       ctx.putImageData(next, 0, 0)
       setStrokes((n) => n + 1)
       clearRegion()
+    } catch {
+      setRunFailed(true)
     } finally {
       setDetecting(false)
     }
   }
   const undoStroke = () => {
-    const prev = undo.current.pop()
+    const prev = undoable.at(-1)
     if (!prev) return
     canvasRef.current!.getContext('2d', { willReadFrequently: true })!.putImageData(prev, 0, 0)
+    setUndone({ of: bitmap, steps: undoable.slice(0, -1) })
     setStrokes((n) => Math.max(0, n - 1))
   }
   const apply = () => {
@@ -440,11 +453,11 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
           {t.crop.zoom}
           <input type="range" min={1} max={4} step={0.1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-20 accent-accent-solid" />
         </label>
-        <button type="button" onClick={undoStroke} disabled={strokes === 0} aria-label={t.tool.undo} className="rounded-md p-1.5 hover:bg-line disabled:opacity-40"><Undo2 className="size-4" /></button>
+        <button type="button" onClick={undoStroke} disabled={!undoable.length} aria-label={t.tool.undo} className="rounded-md p-1.5 hover:bg-line disabled:opacity-40"><Undo2 className="size-4" /></button>
         <button type="button" onClick={onCancel} className="ml-auto rounded-md p-1.5 hover:bg-line" aria-label={t.crop.close}><X className="size-5" /></button>
       </header>
       <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-1.5">
-        <p className={`text-xs ${failed && mode === 'select' ? 'text-danger' : 'text-muted'}`}>{mode === 'select' ? (failed ? t.retouch.selectFailed : embedding === 'loading' ? t.retouch.analyzing : t.retouch.selectHint) : mode === 'erase' ? (smart ? t.retouch.smartHint : t.retouch.eraseHint) : mode === 'restore' ? t.retouch.restoreHint : t.retouch.detectHint}</p>
+        <p className={`text-xs ${runFailed || (failed && mode === 'select') ? 'text-danger' : 'text-muted'}`}>{runFailed ? t.retouch.runFailed : mode === 'select' ? (failed ? t.retouch.selectFailed : embedding === 'loading' ? t.retouch.analyzing : t.retouch.selectHint) : mode === 'erase' ? (smart ? t.retouch.smartHint : t.retouch.eraseHint) : mode === 'restore' ? t.retouch.restoreHint : t.retouch.detectHint}</p>
         {mode === 'select' && (
           <span className="ml-auto flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-0.5 rounded-md bg-panel p-0.5" role="radiogroup" aria-label={t.retouch.pointType}>
