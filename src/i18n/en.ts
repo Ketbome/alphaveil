@@ -59,6 +59,13 @@ export const en = {
     shadow: 'Soft shadow',
     apply: 'Apply background',
   },
+  sharpen: {
+    title: 'Sharpen',
+    hint: 'Bring edge definition back after upscaling',
+    detail: 'Crisper edges',
+    amount: (n: number) => `Amount ${n}%`,
+    apply: 'Apply sharpening',
+  },
   batch: {
     removeAll: 'Remove all',
     removeAllHint: (n: number) => `Remove the background of ${n} images`,

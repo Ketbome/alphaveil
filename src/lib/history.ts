@@ -1,6 +1,6 @@
 import type { Bitmap } from './worker'
 
-export type StepKind = 'source' | 'crop' | 'trim' | 'bg' | 'upscale' | 'compose' | 'retouch'
+export type StepKind = 'source' | 'crop' | 'trim' | 'bg' | 'upscale' | 'sharpen' | 'compose' | 'retouch'
 
 export interface Step {
   bitmap: Bitmap

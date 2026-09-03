@@ -61,6 +61,13 @@ export const fr: Dict = {
     shadow: 'Ombre douce',
     apply: "Appliquer l'arrière-plan",
   },
+  sharpen: {
+    title: 'Netteté',
+    hint: "Retrouvez de la définition sur les bords après l'agrandissement",
+    detail: 'Bords plus nets',
+    amount: (n) => `Intensité ${n} %`,
+    apply: 'Appliquer la netteté',
+  },
   batch: {
     removeAll: 'Tout détourer',
     removeAllHint: (n) => `Supprimer l'arrière-plan de ${n} images`,

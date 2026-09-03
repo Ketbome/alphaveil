@@ -221,6 +221,32 @@ export function composeBackdrop(bmp: Bitmap, opts: Backdrop): Bitmap {
   return { data, width: bmp.width, height: bmp.height }
 }
 
+// Unsharp mask: add back the contrast a small blur takes away. Alpha is left as it
+// is, and pixels whose neighbourhood is not fully opaque are skipped, so a cutout
+// gets no bright halo along its edge. Flat areas below the threshold stay flat,
+// which keeps noise and JPEG blocks from being sharpened into view.
+const SHARPEN_THRESHOLD = 3
+
+export function sharpen(bmp: Bitmap, amount: number, radius = 1.5): Bitmap {
+  const canvas = document.createElement('canvas')
+  canvas.width = bmp.width
+  canvas.height = bmp.height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+  ctx.filter = `blur(${radius}px)`
+  ctx.drawImage(toCanvas(bmp), 0, 0)
+  const blurred = ctx.getImageData(0, 0, bmp.width, bmp.height).data
+  const out = new Uint8ClampedArray(bmp.data)
+  for (let i = 0; i < out.length; i += 4) {
+    if (blurred[i + 3] < 250) continue
+    for (let c = 0; c < 3; c++) {
+      const d = bmp.data[i + c] - blurred[i + c]
+      if (d > -SHARPEN_THRESHOLD && d < SHARPEN_THRESHOLD) continue
+      out[i + c] = bmp.data[i + c] + amount * d
+    }
+  }
+  return { data: out, width: bmp.width, height: bmp.height }
+}
+
 export async function exportBlob(bmp: Bitmap, opts: { format: 'png' | 'jpeg' | 'webp'; background: string | null; quality: number; maxBytes?: number | null }) {
   const canvas = document.createElement('canvas')
   canvas.width = bmp.width

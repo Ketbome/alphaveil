@@ -61,6 +61,13 @@ export const es: Dict = {
     shadow: 'Sombra suave',
     apply: 'Aplicar fondo',
   },
+  sharpen: {
+    title: 'Nitidez',
+    hint: 'Recupera definición en los bordes después de escalar',
+    detail: 'Bordes más definidos',
+    amount: (n) => `Cantidad ${n}%`,
+    apply: 'Aplicar nitidez',
+  },
   batch: {
     removeAll: 'Quitar a todas',
     removeAllHint: (n) => `Quitar el fondo de ${n} imágenes`,

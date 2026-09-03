@@ -119,7 +119,9 @@ async function removeBg(id: number, image: Bitmap) {
   return toBitmap(out)
 }
 
-const TILE = 192
+// Bigger tiles give the transformer more context, which is what keeps textures from
+// flattening out; they were small back when cutting one cloned the whole image.
+const TILE = 384
 const OVERLAP = 16
 
 // RawImage.crop() rebuilds the whole image on a canvas for every call, so cutting

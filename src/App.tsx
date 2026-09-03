@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  Code2, Columns2, Crop, Focus, MonitorDown, MousePointerClick, PaintBucket, Paintbrush, Plus, X, Download, Eraser, HardDrive, Languages, Loader2, LockKeyhole, Monitor, Moon, Scissors, Settings2, Sparkles, Sun, Trash2, Undo2,
+  Aperture, Code2, Columns2, Crop, Focus, MonitorDown, MousePointerClick, PaintBucket, Paintbrush, Plus, X, Download, Eraser, HardDrive, Languages, Loader2, LockKeyhole, Monitor, Moon, Scissors, Settings2, Sparkles, Sun, Trash2, Undo2,
 } from 'lucide-react'
 import type { Area } from 'react-easy-crop'
 import { engine, type Progress } from './lib/engine'
 import type { Bitmap, Box, Point, Status } from './lib/worker'
 import { BG_MODELS, MATTE_MODEL, NO_RUNTIME, SAM_MODEL, SR_MODELS, SR_SCALE, helperDevice, isGpuLimit, isGpuLost, modelAvailable, modelDevice, modelDtype, type ModelSpec, type Runtime, type Tier } from './lib/models'
-import { MAX_SIDE_OUT, composeBackdrop, cropBitmap, download, exportBlob, fileToBitmap, formatBytes, inspectAlpha, resizeBitmap, smartCrop, toObjectUrl, toThumbnailDataUrl } from './lib/image'
+import { MAX_SIDE_OUT, composeBackdrop, cropBitmap, download, exportBlob, fileToBitmap, formatBytes, inspectAlpha, resizeBitmap, sharpen, smartCrop, toObjectUrl, toThumbnailDataUrl } from './lib/image'
 import { zipSync } from 'fflate'
 import { useTheme, type Theme } from './lib/theme'
 import { compareBase, lastOpaque, trimHistory, type Step, type StepKind } from './lib/history'
@@ -75,6 +75,7 @@ export default function App() {
   const [quality, setQuality] = useState(0.92)
   const [maxBytes, setMaxBytes] = useState<number | null>(null)
   const [backdrop, setBackdrop] = useState<{ mode: 'color' | 'blur'; color: string; blur: number; shadow: boolean }>({ mode: 'color', color: '#f3efe6', blur: 24, shadow: true })
+  const [sharpness, setSharpness] = useState(60)
 
   const addInput = useRef<HTMLInputElement>(null)
   const active = items.find((i) => i.id === activeId) ?? null
@@ -341,6 +342,8 @@ export default function App() {
     if (r) reframe('crop', r.x, r.y, r.width, r.height)
   }
 
+  const applySharpen = () => push(sharpen(current!, sharpness / 100), 'sharpen')
+
   const applyBackdrop = () => {
     push(composeBackdrop(current!, { ...backdrop, source: blurSource }), 'compose')
   }
@@ -390,6 +393,9 @@ export default function App() {
   }
   if (current && (lastKind === 'bg' || !transparent)) {
     suggestions.push({ id: 'pick-object', label: t.quality.pickObject, detail: t.quality.pickObjectDetail, icon: <MousePointerClick className="size-3.5" />, onClick: () => setRetouching('select') })
+  }
+  if (current && lastKind === 'upscale') {
+    suggestions.push({ id: 'sharpen', label: t.sharpen.title, detail: t.sharpen.detail, icon: <Aperture className="size-3.5" />, onClick: applySharpen, primary: true })
   }
   if (current && trimmable) {
     suggestions.push({ id: 'trim', label: t.tool.trim, detail: t.tool.trimDetail, icon: <Scissors className="size-3.5" />, onClick: () => bounds && reframe('trim', bounds.x, bounds.y, bounds.width, bounds.height) })
@@ -555,6 +561,23 @@ export default function App() {
               <Tool label={t.tool.removeBgHint(selectedBg.name)} onClick={removeBg} disabled={disabled} icon={<Eraser className="size-4" />} text={t.tool.removeBg} primary />
               <QualityChip value={selectedBg} runtime={runtime ?? NO_RUNTIME} onChange={chooseBg} onUnblock={unblockGpu} compact />
               <Tool label={tooBigToUpscale ? t.tool.upscaleTooBig(MAX_SIDE_OUT) : t.tool.upscaleHint(scale, selectedSr.name)} onClick={upscale} disabled={disabled || tooBigToUpscale} icon={<Sparkles className="size-4" />} text={t.tool.upscale(scale)} />
+              <Popover placement="bottom-start" trigger={({ open }) => (
+                <Tooltip label={t.sharpen.hint} placement="bottom">
+                  <button type="button" disabled={disabled} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition disabled:opacity-40 ${open ? 'bg-line' : 'hover:bg-line'}`}>
+                    <Aperture className="size-4" />{t.sharpen.title}
+                  </button>
+                </Tooltip>
+              )}>
+                {(close) => (
+                  <div className="w-56 space-y-3 text-sm">
+                    <label className="block">
+                      <span className="text-xs text-muted">{t.sharpen.amount(sharpness)}</span>
+                      <input type="range" min={10} max={150} step={5} value={sharpness} onChange={(e) => setSharpness(Number(e.target.value))} className="mt-1 w-full accent-accent-solid" />
+                    </label>
+                    <button type="button" onClick={() => { applySharpen(); close() }} className="w-full rounded-lg bg-accent-solid px-3 py-2 text-sm font-semibold text-on-accent hover:brightness-110">{t.sharpen.apply}</button>
+                  </div>
+                )}
+              </Popover>
               <Tool label={t.tool.trimHint} onClick={() => bounds && reframe('trim', bounds.x, bounds.y, bounds.width, bounds.height)} disabled={disabled || !trimmable} icon={<Scissors className="size-4" />} text={t.tool.trim} />
               <Tool label={t.retouch.hint} onClick={() => setRetouching('erase')} disabled={disabled} icon={<Paintbrush className="size-4" />} text={t.retouch.title} />
               <Popover placement="bottom-start" trigger={({ open }) => (
