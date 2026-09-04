@@ -240,7 +240,7 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     return a
   }
 
-  const applyMask = (keep: boolean) => {
+  const applyMask = (op: 'keep' | 'remove' | 'add') => {
     const mask = selected()
     if (!mask) return
     const ctx = canvasRef.current!.getContext('2d', { willReadFrequently: true })!
@@ -251,12 +251,16 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
     for (let i = 0; i < m.length; i++) {
       const o = i * 4 + 3
       const k = m[i] / 255
-      if (keep) {
-        img.data[o] = Math.round(k * 255)
-        if (src && k > 0) { img.data[o - 3] = src[o - 3]; img.data[o - 2] = src[o - 2]; img.data[o - 1] = src[o - 1] }
-      } else {
+      if (op === 'remove') {
         img.data[o] = Math.round(img.data[o] * (1 - k))
+        continue
       }
+      // Add keeps whatever is already opaque and brings the selection back on top,
+      // so a part the model cut off returns without touching the rest of the cutout.
+      if (op === 'add' && k === 0) continue
+      const a = Math.round(k * 255)
+      img.data[o] = op === 'add' ? Math.max(img.data[o], a) : a
+      if (src && k > 0) { img.data[o - 3] = src[o - 3]; img.data[o - 2] = src[o - 2]; img.data[o - 1] = src[o - 1] }
     }
     ctx.putImageData(img, 0, 0)
     setStrokes((n) => n + 1)
@@ -476,8 +480,9 @@ export function MaskEditor({ bitmap, source, onCancel, onApply, onDetect, onSamE
               </span>
             )}
             <button type="button" onClick={clearPrompt} disabled={!points.length && !box} className="rounded-md px-2 py-1 text-xs hover:bg-line disabled:opacity-40">{t.retouch.clearPoints}</button>
-            <button type="button" onClick={() => applyMask(false)} disabled={!masks} className="rounded-md border border-line px-3 py-1 text-xs font-semibold hover:bg-line disabled:opacity-40">{t.retouch.removeThis}</button>
-            <button type="button" onClick={() => applyMask(true)} disabled={!masks} className="rounded-md bg-accent-solid px-3 py-1 text-xs font-semibold text-on-accent disabled:opacity-40">{t.retouch.keepThis}</button>
+            <button type="button" onClick={() => applyMask('remove')} disabled={!masks} className="rounded-md border border-line px-3 py-1 text-xs font-semibold hover:bg-line disabled:opacity-40">{t.retouch.removeThis}</button>
+            <button type="button" onClick={() => applyMask('add')} disabled={!masks || !canRestore} title={t.retouch.addThisHint} className="rounded-md border border-line px-3 py-1 text-xs font-semibold hover:bg-line disabled:opacity-40">{t.retouch.addThis}</button>
+            <button type="button" onClick={() => applyMask('keep')} disabled={!masks} className="rounded-md bg-accent-solid px-3 py-1 text-xs font-semibold text-on-accent disabled:opacity-40">{t.retouch.keepThis}</button>
           </span>
         )}
         {mode === 'detect' && (

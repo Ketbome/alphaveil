@@ -108,6 +108,8 @@ export const es: Dict = {
     clearPoints: 'Borrar clics',
     keepThis: 'Conservar solo esto',
     removeThis: 'Quitar esto',
+    addThis: 'Agregar esto',
+    addThisHint: 'Recupera esto de la foto original sin tocar el resto del recorte.',
     refine: 'Refinar bordes',
     refineHint: 'Recalcular pelo y pelaje con un modelo de matting',
     smartHint: 'Empieza el trazo sobre el fondo que quieres sacar: solo se borran píxeles de color parecido, así puedes pintar sin cuidado por el borde del sujeto.',

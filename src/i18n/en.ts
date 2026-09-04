@@ -106,6 +106,8 @@ export const en = {
     clearPoints: 'Clear clicks',
     keepThis: 'Keep only this',
     removeThis: 'Remove this',
+    addThis: 'Add this',
+    addThisHint: 'Bring this back from the original photo without touching the rest of the cutout.',
     refine: 'Refine edges',
     refineHint: 'Recompute hair and fur edges with a matting model',
     smartHint: 'Start the stroke on the background you want gone: only pixels with a similar color are erased, so you can paint roughly along the subject.',

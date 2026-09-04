@@ -108,6 +108,8 @@ export const fr: Dict = {
     clearPoints: 'Effacer les clics',
     keepThis: 'Garder seulement ceci',
     removeThis: 'Retirer ceci',
+    addThis: 'Ajouter ceci',
+    addThisHint: "Récupère cet élément depuis la photo d'origine sans toucher au reste du détourage.",
     refine: 'Affiner les bords',
     refineHint: 'Recalculer cheveux et poils avec un modèle de matting',
     smartHint: "Commencez le trait sur l'arrière-plan à retirer : seuls les pixels de couleur proche sont effacés, vous pouvez donc peindre sans précision le long du sujet.",
